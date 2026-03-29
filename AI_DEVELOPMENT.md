@@ -2,17 +2,26 @@
 
 ## Overview
 
-VALEN was built using a coordinated swarm of **13 parallel AI agents** in a single development session. This is not "AI-assisted coding" in the usual sense — it is a structured multi-agent system with defined roles, isolation boundaries, and coordination protocols.
+VALEN was built and is continuously developed using **coordinated AI agents** operating in parallel sessions over 6 months. This is not "AI-assisted coding" — it is a structured multi-agent system with defined isolation boundaries, coordination protocols, and an evolving rule set that grows from production incidents.
 
-The result: **27 issues closed, 18 PRs merged, 497+ tests written**, covering 8 strategy pillars, a perp-native backtest engine, data pipeline, monitoring dashboard, and portfolio allocator.
+The result: **763+ PRs merged, 4,542 tests, 53 agent contract rules, 21 research verdicts** — a system that is defined as much by its development process as by its trading logic.
 
 ---
 
-## Why Multi-Agent?
+## Scale
 
-The VALEN codebase has a natural parallelism: strategy pillars are independent, infrastructure components have clear boundaries, and Clean Architecture enforces separation of concerns. A single developer (human or AI) working sequentially would take weeks. Parallel agents compress this to hours — but only with proper coordination.
+| Metric | Early (Month 1) | Current (Month 6) |
+|--------|-----------------|-------------------|
+| PRs merged | 18 | **763+** |
+| Tests | 497 | **4,542** |
+| Agent contract rules | 10 | **53** |
+| Data daemons | 0 | **28** |
+| Research hypotheses | 0 | **81** |
+| Dead-end verdicts (VRULEs) | 0 | **21** |
+| Backtests logged | ~50 | **900+** |
+| Development model | Sprint-based | Continuous parallel sessions |
 
-The challenge is not running multiple agents. The challenge is preventing them from stepping on each other.
+The "Month 1" numbers reflect the initial wave-based sprint that built the foundation. The "Month 6" numbers reflect continuous evolution — each session adding capability, discovering bugs, tightening rules, and killing bad ideas with evidence.
 
 ---
 
@@ -21,237 +30,113 @@ The challenge is not running multiple agents. The challenge is preventing them f
 ### Git Worktree Isolation
 
 Each agent operates in its own git worktree, branched from `main`. This provides:
-- **File-level isolation**: No two agents can edit the same file simultaneously
+- **File-level isolation**: No two agents edit the same file simultaneously
 - **Clean merge path**: Each agent's work is a self-contained branch
 - **Failure isolation**: If one agent's work is rejected, others are unaffected
 
-```
-repo/
-├── .git/                          # Shared git objects
-├── main/                          # Main branch (read-only during sprint)
-├── worktrees/
-│   ├── feat-p1-btc-treasury/      # Agent A
-│   ├── feat-p2-short-hedge/       # Agent B
-│   ├── feat-p3-grid-perp/         # Agent C
-│   ├── infra-ci-pipeline/         # Agent D
-│   ├── infra-monitoring/          # Agent E
-│   └── ...                        # 13 worktrees total
-```
+### Conflict Preflight (Mandatory)
 
-### Branch Naming Convention
+Before picking up any work, agents run `conflict_preflight.sh` which checks for exclusive zone contention — overlapping file modifications in active branches. If exit code is 2, the agent STOPS. This prevents the cascading merge conflict problem that plagues naive parallel development.
 
-```
-<type>/<scope>/<description>
+### Merge Orchestrator
 
-Examples:
-  feat/p1/btc-treasury-strategy
-  feat/p2/short-hedge-strategy
-  infra/ci/github-actions-pipeline
-  infra/data/sqlite-persistence
-  feat/backtest/perp-engine
-```
+Before merging PRs, `merge_orchestrator.sh` computes safe merge ordering based on file dependency analysis. This replaced ad-hoc "merge and hope" which created integration failures when PRs touched shared interfaces.
 
-### Agent-ID Tracking
+### Verification Gate
 
-Every commit includes the agent's identity:
-
-```
-feat(p2): implement short hedge with RSI + EMA confirmation
-
-Agent-ID: strategy-eng-p2-20260315-1423
-```
-
-This creates a complete audit trail: for any line of code, you can identify which agent wrote it, when, and under which issue.
+Every PR must pass `agent_verify.sh` (lint + type check + tests + architecture conformance) before merge. The architecture check programmatically enforces import boundaries — domain models cannot import from adapters, services cannot import directly from adapters, etc.
 
 ---
 
-## Wave-Based Parallel Development
+## The 53-Rule Agent Contract
 
-Work was organized into waves based on dependency analysis. Within a wave, all issues can be developed in parallel. Between waves, there is a synchronization point (merge to main, resolve conflicts).
+The agent contract is the most important artifact of the AI development process. It started with 10 basic rules and grew to 53 through a feedback loop: every production incident or research failure spawns a new rule that prevents recurrence.
 
-### Wave Breakdown
+### Rule Evolution Timeline
 
-```
-Wave 0: Foundation (7 issues)
-├── Domain models (Pydantic v2)
-├── SQLite persistence layer
-├── Port interfaces (4 ABCs)
-├── CI/CD pipeline (GitHub Actions)
-├── Rate limiter (thread-safe)
-├── Data pipeline (S3 archive downloader)
-└── Indicator library (EMA, RSI, ATR, BB, ROC, Momentum)
+**Rules 1-10 (Foundation):** Basic hygiene — run verification before reporting, log backtests, use wrapper scripts, never enable live trading without approval.
 
-    ▼ sync point: merge all Wave 0 PRs
+**Rules 11-28 (Research discipline):** Added as research methodology matured — hypothesis registry, frequency audits, per-asset decomposition, terminology standardization ("sleeves" not "pillars"), data tier isolation.
 
-Wave 1: Core Engine (4 issues)
-├── Hyperliquid adapter (REST + WS)
-├── Backtest engine (perp-native)
-├── P6 Mean Reversion strategy
-└── P4 Funding Arb research
+**Rules 29-38 (Research failure prevention):** Each rule prevents a specific failure that actually occurred:
+- **Rule 29**: Never claim system-level Sortino from component tests (happened: ad-hoc script testing 2 modules claimed system-level results)
+- **Rule 30**: Apply adversarial review before declaring dead-ends (happened: VRULE-017 prematurely rejected CEM, wasting weeks when overturned)
+- **Rule 31**: Factorial interaction testing before combining findings (happened: 6 accepted findings combined produced WORSE results than baseline)
+- **Rule 37**: Canonical fee model only (happened: three different fee rates in three scripts, all wrong)
+- **Rule 38**: Dead signal detection before wiring (happened: funding signal had 0/73 hit rate, discovered months later)
 
-    ▼ sync point
+**Rules 39-43 (Meta-findings):** Encode the strongest research conclusions directly into the development process:
+- **Rule 39**: Always decompose aggregate signals into per-asset signals (+123% Sortino improvement)
+- **Rule 42**: Per-asset funding rates are different (PAXG negative = income, original model was 16x overstated)
 
-Wave 1.5: Strategies (2 issues)
-├── P2 Short Hedge strategy
-└── Monitoring dashboard + alerts
+**Rules 44-53 (Deep audit):** Added after a 15-agent parallel audit found 53 bugs:
+- **Rule 44**: Interface contract verification (wrong attribute names made recalibrator dead for entire session)
+- **Rule 45**: No silent `except Exception: pass` (4 bugs hidden by bare except handlers)
+- **Rule 46**: `default_factory` must be pure (network calls in dataclass defaults broke CI)
+- **Rule 50**: Dead code audit per PR (19 dead modules accumulated over weeks)
+- **Rule 52**: State persistence round-trip tests (positions wiped, equity reset, PnL lost — all from save/load asymmetry)
 
-    ▼ sync point
+### Why This Matters for Engineering Leaders
 
-Wave 2: Strategies (2 issues)
-├── P1 BTC Treasury strategy
-└── P3 Grid Perp strategy
+The rule set is a living document of **organizational learning encoded as automated constraints**. In a human team, this knowledge lives in tribal memory and code review judgment. In an AI-augmented system, it must be explicit — every lesson learned becomes a rule that applies to every future session, regardless of which agent picks up the work.
 
-    ▼ sync point
-
-Wave 3: Final (4 issues)
-├── Paper trading engine
-├── P5 Multi-Asset Momentum strategy
-├── Portfolio allocator (5 methods)
-└── P8 Liquidation Hunter research
-```
-
-### Why Waves?
-
-Without waves, parallel agents create cascading merge conflicts. Wave 0 establishes the shared contracts (domain models, ports) that all later work depends on. Once those are merged, agents in Wave 1+ can build against stable interfaces.
+The progression from 10 to 53 rules also demonstrates the system's ability to learn from its own failures. Each rule has a documented incident that motivated it, making the contract simultaneously a policy document and a post-mortem archive.
 
 ---
 
-## Agent Persona System
+## Deep Audit: 15-Agent Parallel Bug Hunt
 
-Nine specialized personas, each with domain-specific instructions and constraints:
+The most ambitious multi-agent operation was a 15-agent deep audit that found **53 bugs** across the full codebase. Each agent was assigned a specific audit scope:
 
-### Persona Definitions
+| Agent | Scope | Bugs Found |
+|-------|-------|------------|
+| Signal integrity | L1 signal engines | 5 (Oil/RENDER never fired, EMA config dead code) |
+| Execution layer | SOR + routing | 4 (health monitor thread safety, gate miscalculation) |
+| State persistence | Save/load cycle | 3 (positions wiped, equity reset, PnL lost) |
+| Interface contracts | Cross-component wiring | 6 (wrong attribute names, missing propagation) |
+| Exception handling | Silent failures | 8 (bare except:pass hiding AttributeError, ImportError) |
+| Dead code | Unused modules/methods | 19 modules identified |
+| Data integrity | DB access patterns | 4 (missing busy_timeout, no LIMIT clauses) |
+| Configuration | Default values | 3 (network calls in default_factory) |
+| Others | Various | 1 remaining |
 
-| # | Persona | Specialization | Constraints |
-|---|---------|---------------|-------------|
-| 1 | **Quant Architect** | System design, port interfaces, domain models | Cannot modify strategy logic |
-| 2 | **Strategy Engineer** | Signal logic, indicator implementation, parameter tuning | Must follow hypothesis protocol |
-| 3 | **Infrastructure Engineer** | Data pipeline, adapters, database, rate limiter | Cannot modify domain models |
-| 4 | **Risk Engineer** | Margin modeling, kill criteria, liquidation detection | Must validate against HL specs |
-| 5 | **Research Analyst** | Hypothesis formulation, dead-end analysis, literature review | Cannot write production code |
-| 6 | **DeFi Specialist** | On-chain mechanics, funding rates, HL-specific behavior | Must verify against testnet |
-| 7 | **Test Engineer** | Test design, coverage analysis, fixture creation | Must achieve >90% branch coverage |
-| 8 | **DevOps Engineer** | CI/CD, deployment, monitoring infrastructure | Cannot modify strategy configs |
-| 9 | **Coordinator** | Wave planning, conflict resolution, agent assignment | Read-only on codebase |
-
-### Persona Benefits
-
-- **Focused context**: Each agent loads only the context relevant to its role, reducing hallucination risk
-- **Clear boundaries**: Personas cannot exceed their scope, preventing uncoordinated changes
-- **Skill matching**: Complex strategy work gets Opus-tier agents; infrastructure gets Sonnet-tier (cost optimization)
+**12 PRs were merged in a single session** (#736-#747), each fixing a category of bugs. This audit also produced rules 44-53.
 
 ---
 
-## Tiered Agent Assignment
+## Development Model: Continuous, Not Sprint-Based
 
-Not all tasks require the same level of reasoning capability. VALEN uses tiered assignment to optimize cost and quality:
+The initial development used wave-based sprints (Wave 0 foundation → Wave 1 core → Wave 2 strategies → Wave 3 integration). This was effective for bootstrapping but insufficient for ongoing development where research findings continuously reshape the architecture.
 
-| Tier | Model | Assignment | Reasoning |
-|------|-------|------------|-----------|
-| **Opus** | Claude Opus | Strategy logic, backtest engine, port design | Requires deep domain reasoning, mathematical precision |
-| **Sonnet** | Claude Sonnet | CI/CD, data pipeline, monitoring, test scaffolding | Primarily implementation, clear specifications |
+The current model is **continuous parallel sessions**:
 
-### Cost Optimization
+1. **Research sessions**: Test hypotheses, run factorial campaigns, generate findings
+2. **Implementation sessions**: Wire accepted findings into production code
+3. **Audit sessions**: Deep-scan for bugs, dead code, interface mismatches
+4. **Infrastructure sessions**: Data pipeline expansion, daemon management, deployment
 
-- Opus-tier agents handle ~40% of issues (the critical path)
-- Sonnet-tier agents handle ~60% of issues (infrastructure and tests)
-- Estimated cost savings: 50-60% vs. running all Opus
-- No quality regression — Sonnet-tier tasks are well-specified and bounded
-
----
-
-## Conflict Resolution Protocol
-
-When parallel agents modify shared files (e.g., `__init__.py`, port interfaces), conflicts are inevitable. The protocol:
-
-1. **Detect**: CI runs merge checks against `main` before PR approval
-2. **Classify**: Is the conflict additive (both agents adding exports) or semantic (different implementations)?
-3. **Resolve**:
-   - **Additive**: Merge both changes (e.g., combine router exports from P1 and P2)
-   - **Semantic**: Coordinator agent reviews both approaches and selects one
-4. **Verify**: Run full test suite after resolution
-
-In the VALEN sprint, 3 merge conflicts occurred (all additive — multiple agents adding exports to shared `__init__.py` files). All were resolved automatically.
-
----
-
-## Verification Pipeline
-
-Every PR must pass the verification pipeline before merge:
-
-```bash
-#!/bin/bash
-# agent_verify.sh (simplified)
-
-set -e
-
-echo "=== Lint Check (ruff) ==="
-ruff check src/ tests/ scripts/
-
-echo "=== Type Check (mypy) ==="
-mypy src/ --strict
-
-echo "=== Test Suite ==="
-pytest tests/ -v --tb=short
-
-echo "=== Architecture Check ==="
-python scripts/check_architecture.py  # Verifies import boundaries
-
-echo "=== All checks passed ==="
-```
-
-### Architecture Conformance
-
-The architecture check enforces:
-- Domain models import nothing from adapters or services
-- Ports import only from domain
-- Services import from ports and domain, never directly from adapters
-- Adapters implement port interfaces
-
-This is checked programmatically, not by convention. A single import violation fails CI.
+Each session type has different agent configurations, verification requirements, and merge protocols. Research sessions are exploratory (more tolerance for throwaway code). Implementation sessions are strict (full verification, interface contract tests). Audit sessions are adversarial (explicitly trying to break things).
 
 ---
 
 ## Lessons Learned
 
-### What Worked
+### What Works
 
-1. **Wave-based planning eliminates most conflicts.** Spending 30 minutes on dependency analysis saved hours of conflict resolution.
-2. **Port interfaces as synchronization barriers.** Once ports were merged in Wave 0, all subsequent work had stable contracts to build against.
-3. **Agent-ID tracking is essential for debugging.** When a test fails, you need to know which agent's code introduced the regression.
-4. **Persona constraints prevent scope creep.** Without constraints, agents tend to "helpfully" modify files outside their scope.
-5. **Tiered assignment is cost-effective.** Infrastructure tasks don't need the most capable model.
+1. **Git worktree isolation eliminates most file conflicts.** The conflict preflight catches the rest.
+2. **Rules that encode failure modes prevent repeat incidents.** The 53-rule contract is proof.
+3. **Interface contract tests catch the #1 bug category.** Silent integration failures from attribute name mismatches.
+4. **Adversarial audit sessions find what normal development misses.** 53 bugs in one session.
+5. **Canonical fee model prevents inconsistency.** Three different fee rates was the anti-pattern.
 
-### What Was Challenging
+### What Failed and Was Fixed
 
-1. **Shared `__init__.py` files.** Every pillar agent adds exports to the router's `__init__.py`. This is the #1 source of merge conflicts. Solution: coordinator merges these manually after each wave.
-2. **Test fixture dependencies.** Multiple test files need similar mock fixtures. Without coordination, agents create duplicate fixtures. Solution: shared `conftest.py` established in Wave 0.
-3. **Indicator library contention.** Multiple strategies use the same indicators (EMA, RSI). Agents implementing different strategies sometimes added the same indicator independently. Solution: indicator library was a Wave 0 task, not per-strategy.
+1. **Sprint model doesn't scale past initial build.** Replaced with continuous parallel sessions.
+2. **"13 agents in one sprint" created coordination overhead.** Smaller, focused sessions are more effective.
+3. **Silent exception handling hid critical bugs for weeks.** Now banned via Rule 45.
+4. **Dead code accumulated without active cleanup.** Now audited per PR via Rule 50.
+5. **Aggregate signals masked per-asset opportunities.** Per-asset decomposition is now Rule 39.
 
-### Metrics
+### Key Insight
 
-| Metric | Value |
-|--------|-------|
-| Total issues | 27 |
-| PRs merged | 18 |
-| Merge conflicts | 3 (all additive, resolved quickly) |
-| Tests written | 497+ |
-| CI failures (pre-merge) | 7 (all fixed before merge) |
-| Agent tiers used | 2 (Opus + Sonnet) |
-| Total development time | Single session |
-| Estimated sequential time | 2-3 weeks |
-| Compression ratio | ~15-20x |
-
----
-
-## Implications
-
-This development model is not specific to VALEN. Any codebase with:
-- Clear architectural boundaries (Clean Architecture helps enormously)
-- Natural parallelism (multiple independent features)
-- Well-defined interfaces (ports, APIs, contracts)
-- Comprehensive test coverage (agents need fast feedback)
-
-...can benefit from multi-agent parallel development. The key investment is the coordination infrastructure: wave planning, branch conventions, conflict resolution protocol, and verification pipeline.
-
-The AI agents are not replacing the architect. They are executing the architect's plan in parallel, with the architect making strategic decisions about decomposition, prioritization, and conflict resolution. The human contribution shifts from writing code to designing systems that can be built in parallel.
+The most valuable output of AI-augmented development is not the code — it is the **encoded institutional knowledge** in the agent contract, VRULE registry, and hypothesis database. These artifacts ensure that every future development session starts with the full context of what has been tried, what failed, and why. In a traditional team, this knowledge lives in people's heads and is lost to turnover. In VALEN, it is versioned, searchable, and automatically applied.

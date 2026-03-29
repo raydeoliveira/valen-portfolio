@@ -2,15 +2,17 @@
 
 ## Philosophy
 
-Every strategy decision in VALEN is treated as a hypothesis to be tested, not an opinion to be defended. This methodology was forged through EISEN's development (7 system versions, 4 pillar eliminations, hundreds of backtests) and carried forward into VALEN with refinements.
+Every design decision in VALEN is treated as a hypothesis to be tested, not an opinion to be defended. This methodology was forged through EISEN's development (7 system versions, 4 strategy eliminations, hundreds of backtests) and hardened through VALEN's own research program: **81 hypotheses tested, 21 dead-end verdicts, 900+ backtests** across 6 months.
 
 The core principle: **a strategy that cannot be killed by its own test plan is not being tested rigorously enough.**
+
+The second principle: **a well-documented rejection is more valuable than an untested assumption.** VALEN's 21 VRULEs (dead-end verdicts) prevent future work from repeating past failures. Each VRULE encodes not just "this doesn't work" but the specific conditions under which it was tested, so it can be re-evaluated if conditions change.
 
 ---
 
 ## Hypothesis-Driven Development
 
-Every proposed change — new signal, parameter adjustment, pillar addition — follows a formal lifecycle:
+Every proposed change — new signal, parameter adjustment, sleeve addition — follows a formal lifecycle:
 
 ```
 ┌──────────────┐
@@ -40,37 +42,25 @@ Every proposed change — new signal, parameter adjustment, pillar addition — 
 
 ### Hypothesis Registry
 
-All hypotheses are tracked in a central JSON registry with:
-- Unique ID (e.g., `HYP-P2-003`)
-- Status: `proposed` | `testing` | `accepted` | `rejected` | `modified`
+All 81 hypotheses are tracked in a central JSON registry with:
+- Unique ID (e.g., `VH-087`)
+- Status: `proposed` | `testing` | `accepted` | `rejected` | `conditional_pass`
 - Parent hypothesis (if derived from a prior test)
 - Kill criteria (quantitative thresholds)
-- Test results (metrics, dataset hash, timestamp)
-- Verdict rationale
+- Test results (metrics, dataset provenance, timestamp)
+- Verdict rationale with supporting data
 
-This creates an auditable trail. You can trace any current parameter back to the hypothesis that justified it.
-
-### Example Hypothesis
-
-```
-ID:         HYP-P2-007
-Statement:  "P2 Short Hedge generates positive Sortino(γ=2) > 0.5 on BTC perps
-             during bear regimes (drawdown > 15% from local high) using RSI + EMA
-             crossover confirmation, with 3x leverage and 2% max position size."
-Kill:       Sortino < 0.3 OOS, or max drawdown > 25%, or win rate < 35%
-Dataset:    BTC 1h candles, 2023-01-01 to 2025-06-30, HL archive
-Status:     testing
-```
+This creates an auditable trail. Any current parameter can be traced back to the hypothesis that justified it.
 
 ---
 
 ## Factorial Campaign Design
 
-Parameter optimization uses factorial sweeps rather than random search or grid search on individual parameters. This captures interaction effects between parameters.
+Parameter optimization uses factorial sweeps rather than random search or Bayesian optimization. This captures interaction effects between parameters — a critical requirement discovered when 6 individually-accepted findings produced worse results when combined.
 
 ### Process
 
-1. **Identify factors**: Select 3-5 parameters to sweep (e.g., EMA period, RSI threshold, leverage, position size)
+1. **Identify factors**: Select 3-5 parameters to sweep
 2. **Define levels**: 2-4 levels per factor, chosen based on domain knowledge
 3. **Full factorial**: Run all combinations (e.g., 4 x 3 x 3 x 2 = 72 backtests)
 4. **Analyze main effects**: Which factors dominate performance?
@@ -79,16 +69,22 @@ Parameter optimization uses factorial sweeps rather than random search or grid s
 
 ### Why Not Bayesian Optimization?
 
-Bayesian optimization finds the single best point efficiently. But in trading, the single best point is almost always overfit. We want the **broad plateau** — a region of parameter space where performance is consistently good, not a narrow spike. Factorial design reveals the shape of the response surface, which is more valuable than the peak.
+Bayesian optimization finds the single best point efficiently. But in trading, the single best point is almost always overfit. We want the **broad plateau** — a region of parameter space where performance is consistently good. Factorial design reveals the shape of the response surface, which is more valuable than the peak.
+
+### Why Factorial Interaction Testing Is Mandatory
+
+**Rule 31 exists because of a specific failure.** Six independently-validated findings (each improving Sortino in isolation) were combined and produced results *worse* than the baseline. The reason: negative interaction effects between findings that were invisible in isolation.
+
+The rule now requires pairwise testing of every combination of 2+ accepted findings before simultaneous deployment. This is expensive (combinatorial) but prevents the assumption that independent improvements compose additively.
 
 ---
 
 ## Temporal Red-Teaming
 
-After every factorial campaign, results are challenged through temporal analysis:
+After every factorial campaign, results are challenged through 5 temporal analyses:
 
 ### 1. Regime Decomposition
-Split the test period into regimes (bull, bear, sideways, high-vol, low-vol) and evaluate performance in each. A strategy that only works in one regime is fragile.
+Split the test period into regimes (bull, bear, sideways, high-vol, low-vol, crash+recovery) and evaluate performance in each. A strategy that only works in one regime is fragile.
 
 ### 2. Rolling Window Analysis
 Run the backtest on rolling 90-day windows. Plot Sortino over time. Look for:
@@ -111,35 +107,42 @@ Systematic check for:
 ### 5. Data Snooping Audit
 If N parameter combinations were tested, apply a data snooping correction:
 - Report the probability that the best result is due to chance
-- Use White's Reality Check or Hansen's SPA test for formal statistical assessment
+- Use Bonferroni correction as the minimum bar (331K observation tests use this)
 
 ---
 
-## Dead-End Documentation
+## Dead-End Verdicts (VRULEs)
 
-Failed strategies and rejected hypotheses are documented with the same rigor as successes. This serves two purposes:
+Failed strategies and rejected hypotheses receive formal verdicts. VALEN has 21 VRULEs, each preventing future work from repeating a tested failure.
 
-1. **Prevent repetition**: Future researchers (human or AI) can see why an approach was tried and why it failed
-2. **Enable re-evaluation**: When structural conditions change (e.g., moving from Coinbase to Hyperliquid), dead-ends can be systematically re-evaluated
+### VRULE Structure
 
-### Dead-End Classification
+Each verdict includes:
+- **Scope**: Component-level or system-level
+- **Finding**: What was tested and what happened
+- **Evidence**: Specific metrics, sample sizes, test conditions
+- **Conditions for re-evaluation**: When this verdict might be overturned
 
-Each eliminated strategy or hypothesis receives a classification:
+### Selected VRULEs
 
-| Class | Meaning | Re-evaluate? |
-|-------|---------|--------------|
-| **Structural** | Failed due to exchange-specific constraints (fees, instruments) | Yes, on new exchange |
-| **Fundamental** | No alpha exists in the signal | No |
-| **Temporal** | Alpha existed but decayed | Maybe, with regime analysis |
-| **Implementation** | Idea sound but execution flawed | Yes, with better implementation |
+| VRULE | Finding | Why It Matters |
+|-------|---------|---------------|
+| VRULE-001 | Dynamic leverage per regime is dead | Prevents revisiting leverage-switching schemes |
+| VRULE-012 | Strategy-mode engines lose to dual-EMA | Prevents building complex switching logic |
+| VRULE-013 | Cross-exchange derivatives: zero alpha for BTC | Prevents Coinalyze OI/funding signal work |
+| VRULE-019 | Naked shorts liquidated in bull markets | Requires 3-tier loss management for all shorts |
+| VRULE-020 | Funding is per-asset (original model 16x wrong) | Corrected fee model; PAXG funding = income |
+| VRULE-021 | Mean reversion sideways loses to holding | Prevents MR-in-sideways strategy proposals |
 
-### EISEN-to-VALEN Re-evaluation
+### VRULE Quality Control
 
-Three EISEN eliminations were classified as **Structural** and re-evaluated for VALEN:
+A key lesson: **premature VRULEs waste more time than premature acceptance.** VRULE-017 (CEM rejection) was declared based on testing with dead signals, BTC-only data, and wrong fee accounting. When overturned, weeks of work had been skipped based on an invalid verdict.
 
-- **P2 Short Hedge** (EISEN: eliminated) — Failed due to Coinbase futures fee drag. Hyperliquid has native perp shorts at lower fees. **Re-evaluation: viable.**
-- **P3 Grid** (EISEN: eliminated) — Failed due to no maker rebates on Coinbase. Hyperliquid offers maker fee advantages. **Re-evaluation: viable.**
-- **P5 Momentum** (EISEN: eliminated, -38.85% forward) — Failed due to spot-only, long-only constraints. Hyperliquid offers 100+ perp markets with short-side. **Re-evaluation: viable with short-side.**
+Every VRULE now requires surviving an adversarial review (Rule 40):
+1. Was the test on the right data?
+2. The right assets (multi-asset, not BTC-only)?
+3. The right fee model (canonical, not hardcoded)?
+4. The right signals (verified non-zero hit rate)?
 
 ---
 
@@ -147,86 +150,57 @@ Three EISEN eliminations were classified as **Structural** and re-evaluated for 
 
 ### Why Sortino Over Sharpe
 
-This is not a preference — it is a mathematical argument.
+The Sharpe ratio penalizes upside volatility equally with downside volatility. In crypto, a strategy capturing 40% upside moves while limiting drawdowns to 8% has high total volatility but excellent risk-adjusted returns. Sharpe penalizes it. Sortino rewards it.
 
-The Sharpe ratio is defined as:
+This is not a preference — it changes which parameter sets survive optimization. The gamma=2 parameter in Sortino applies quadratic penalty to downside deviation, making the metric more sensitive to tail risk.
 
-```
-Sharpe = (R - Rf) / σ
-```
+| Priority | Metric | Rationale |
+|----------|--------|-----------|
+| Primary | **Sortino(gamma=2)** | Penalizes only downside; upside vol is desirable in crypto |
+| Secondary | **Omega(threshold=0)** | Full-distribution, probability-weighted gain/loss ratio |
+| Tertiary | **Calmar** | Return / max drawdown — the survival metric |
+| **Never** | **Sharpe** | Penalizes upside volatility; structurally wrong for right-skewed returns |
 
-Where σ is total standard deviation (upside + downside). This penalizes strategies with high upside volatility — exactly the strategies we want in crypto.
+### The Per-Asset Decomposition Finding
 
-The Sortino ratio is defined as:
+The single strongest meta-finding across all VALEN research: **per-asset signal decomposition improved Portfolio Sortino by +123%** compared to aggregate signals.
 
-```
-Sortino = (R - MAR) / σ_downside
-```
+Every signal, threshold, modulation frequency, and stop width performs better when calibrated per-asset:
 
-Where σ_downside only counts returns below the minimum acceptable return (MAR). A strategy that captures large upside moves while limiting drawdowns has high Sortino and mediocre Sharpe. We optimize for Sortino.
+| Dimension | Aggregate (old) | Per-asset (current) |
+|-----------|----------------|-------------------|
+| Vol modulation | Portfolio-level vol | Per-sleeve vol regime |
+| Short basket | Aggregate activation | Per-coin momentum/funding/OI |
+| Stops | Fixed 1.5% for all | ATR-scaled (HYPE 2.0x, PAXG 3.0x) |
+| Modulation frequency | Uniform 4h | Per-asset (BTC 1h, HYPE 15m, PAXG 4h) |
+| Recalibration | Portfolio-wide grid | Per-sleeve parameter sweeps |
 
-The gamma parameter (γ=2) in our Sortino calculation applies quadratic penalty to downside deviation, making the metric more sensitive to tail risk.
-
-### Why Omega as Secondary
-
-The Omega ratio considers the entire return distribution, not just mean and variance:
-
-```
-Omega(θ) = ∫[θ,∞] (1 - F(r)) dr / ∫[-∞,θ] F(r) dr
-```
-
-With θ=0, this gives the probability-weighted ratio of gains to losses. It captures skewness and kurtosis that Sortino misses.
-
-### Why Calmar as Tertiary
-
-```
-Calmar = Annualized Return / Max Drawdown
-```
-
-Calmar is the "survival metric." A strategy with excellent Sortino but 60% max drawdown will blow up before the long run arrives. Calmar keeps us honest about drawdown risk.
-
-### STARR for Leverage
-
-```
-STARR = Sortino / Average Realized Risk
-```
-
-When running leveraged perp positions, the Sortino alone doesn't capture the risk amplification. STARR adjusts for the actual risk taken, making it possible to compare a 3x leveraged strategy with a 1x strategy on equal footing.
+This finding is encoded as Rule 39: every new mechanism must ask "Does this use an aggregate signal where a per-asset signal would be more precise?"
 
 ---
 
 ## Adversarial Signal Audit
 
-Before any new signal or indicator is added to a strategy, it undergoes an adversarial audit:
+Before any new signal is added, it undergoes an adversarial audit:
 
-### Questions the Audit Answers
-
-1. **What is the economic mechanism?** If you cannot explain why this signal should predict returns, it is curve-fitting.
-2. **Who is on the other side?** Every profitable trade has a counterparty losing money. Who are they and why are they wrong?
-3. **What regime does this signal fail in?** Every signal has a failure mode. If you cannot identify it, you have not looked hard enough.
-4. **Is this signal already crowded?** If many participants use the same signal, it is arbitraged away. What is the evidence for or against crowding?
-5. **What is the signal's half-life?** Signals decay. How long before this edge erodes?
-
-### Game-Theoretic Framing
-
-Trading is adversarial. The market is not a random number generator — it is populated by other agents with their own models. A signal that works in backtest may fail live because:
-
-- Other participants adapt to the same signal
-- The signal's alpha was absorbed into market microstructure
-- Regime change invalidates the economic mechanism
-
-The adversarial audit forces explicit reasoning about these dynamics before committing to implementation.
+1. **What is the economic mechanism?** If you cannot explain why this signal predicts returns, it is curve-fitting.
+2. **Who is on the other side?** Every profitable trade has a counterparty. Who are they and why are they wrong?
+3. **What regime does this signal fail in?** If you cannot identify the failure mode, you have not looked hard enough.
+4. **Is this signal crowded?** Evidence for/against crowding.
+5. **What is the signal's half-life?** How long before this edge erodes.
+6. **What is the recent hit rate?** Signals with <5% activation on recent 30-day data are suspect. The funding signal (0/73 hit rate) should have been caught at the wiring stage, not months later.
 
 ---
 
 ## Frequency Audit
 
-Before any backtest or parameter sweep, a frequency audit ensures the data granularity matches the strategy's decision frequency. This prevents a common and catastrophic error: **optimizing a daily strategy on hourly data** (which overfits to intraday noise that the strategy cannot trade).
+Before any backtest, a frequency audit ensures data granularity matches the strategy's decision frequency. This prevents a catastrophic error: **optimizing a 4h strategy on 1h data** (which overfits to intrabar noise the strategy cannot trade).
 
 The audit checks:
 - Signal computation frequency vs. candle interval
-- Minimum data points required for indicator warm-up
-- Information loss percentage (signals computed on data the strategy cannot act on)
-- Recommended adjustments if mismatch is detected
+- Minimum data points for indicator warm-up
+- Information loss percentage (signals computed on bars the strategy cannot act on)
 
 A frequency mismatch above 90% information loss blocks the backtest from running.
+
+**Why this exists**: VALEN's most important research finding is that ALL candle-based directional signals collapse at sub-hourly frequencies. Fee drag exceeds 100% of gross alpha at VIP-0. Without the frequency audit, researchers repeatedly test sub-hourly signals, get promising in-sample results (from overfitting to noise), and waste time on fundamentally unviable strategies.

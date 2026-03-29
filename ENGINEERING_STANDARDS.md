@@ -2,35 +2,23 @@
 
 ## Code Style
 
-### Python Version
+### Python
 - Python 3.11+ required
-- Full use of modern syntax: `X | Y` union types, `match` statements, f-strings
-
-### Type Hints
-- All function signatures must have complete type annotations
+- Modern syntax: `X | Y` union types, `match` statements, f-strings
+- Full type annotations on all function signatures
 - `mypy --strict` must pass with zero errors
-- Use `from __future__ import annotations` for forward references
-- Prefer `X | None` over `Optional[X]`
+- `ruff` with comprehensive rule set (Black-compatible, 88 char lines)
+- **No `print()` statements** — all output through structured logger
 
-### Linting
-- **ruff** with comprehensive rule set
-- Line length: 88 characters (Black-compatible)
-- Import sorting: isort-compatible via ruff
-
-### Naming Conventions
-- Classes: `PascalCase`
-- Functions/methods: `snake_case`
-- Constants: `UPPER_SNAKE_CASE`
-- Private: `_leading_underscore`
-- Module-level: `lowercase_with_underscores`
+### Financial Values
+- `Decimal` for all monetary amounts, prices, and rates — never `float`
+- This is enforced in code review. A `float` representing money is a bug.
 
 ---
 
 ## Architecture Rules
 
-### Import Boundaries
-
-These are enforced by CI, not by convention.
+### Import Boundaries (CI-Enforced)
 
 ```
 Domain  →  (nothing — domain is pure)
@@ -41,148 +29,171 @@ Scripts  →  Anything (entry points)
 Tests   →  Anything (testing boundary)
 ```
 
-**Violation of import boundaries fails CI.**
+**These are checked programmatically, not by convention.** A single import violation fails CI. This is what makes Clean Architecture actually clean — the constraints are mechanical, not aspirational.
 
-### Domain Models
-- All domain models use Pydantic v2 `BaseModel`
-- Models are exchange-agnostic — no Hyperliquid-specific types in domain
-- Use `Decimal` for all financial values (never `float`)
+### Domain Model Rules
+- All models use Pydantic v2 `BaseModel`
+- Exchange-agnostic — no Hyperliquid-specific types in domain
+- `Decimal` for all financial values
 - Enums for fixed vocabularies (`Direction`, `OrderSide`, `OrderType`, `TimeInForce`)
 
 ### Port Design
 - Ports are abstract base classes (ABCs)
 - Every port method has a docstring with Args, Returns, and behavioral notes
-- Ports define contracts — they never contain implementation logic
-- New port methods require corresponding tests in the contract test suite
+- Ports define contracts with zero implementation logic
+- New port methods require contract tests
 
-### Adapter Implementation
+### Adapter Rules
 - Each adapter implements exactly one port
-- Adapters handle exchange-specific translation (e.g., Hyperliquid SDK types to domain types)
+- Adapters handle exchange-specific translation (SDK types → domain types)
 - Error handling lives in adapters, not in domain or services
 - Adapters never expose exchange SDK types to consumers
 
 ---
 
-## Testing Requirements
+## Rules That Exist Because of Bugs
 
-### Coverage Targets
-- Domain models: 100% branch coverage
-- Port contracts: 100% method coverage
-- Services: >90% branch coverage
-- Adapters: >80% (network-dependent paths may be mocked)
+These engineering standards were not designed in advance. Each one was added after a specific production incident. The incident is documented so the rule can be understood, not just followed.
 
-### Test Organization
-```
-tests/
-├── conftest.py              # Shared fixtures
-├── test_domain_models.py    # Domain layer
-├── test_ports.py            # Port contract verification
-├── test_indicators.py       # Indicator math verification
-├── test_backtest_engine.py  # Backtest mechanics
-├── test_p1_btc_treasury.py  # Per-pillar strategy tests
-├── test_p2_short_hedge.py
-├── test_p3_grid_perp.py
-├── test_p6_mean_reversion.py
-├── test_rate_limiter.py     # Infrastructure
-├── test_database.py
-├── test_hl_adapter.py
-├── test_monitor.py
-└── ...
+### No Silent Exception Swallowing (Rule 45)
+
+```python
+# BANNED — hides bugs for weeks
+except Exception:
+    pass
+
+# REQUIRED — at minimum, log
+except Exception as exc:
+    logger.warning("Operation failed: %s", exc)
 ```
 
-### Testing Principles
-1. **Strategy tests never touch the network.** All exchange interactions are mocked through port interfaces.
-2. **Use deterministic data.** Tests must produce identical results on every run. No random seeds without explicit control.
-3. **Test behavior, not implementation.** Assert on outputs and side effects, not internal state.
-4. **One assertion per concept.** A test with 15 assertions is 15 tests pretending to be one.
-5. **Fixtures in conftest.py.** No duplicate test setup across files.
+**Incident**: The recalibrator was completely dead for an entire development session because an `AttributeError` (wrong attribute name) was caught by a bare `except Exception: pass`. Four other components had the same pattern, all hiding real bugs.
+
+### `default_factory` Must Be Pure (Rule 46)
+
+```python
+# BANNED — makes tests non-deterministic, breaks CI
+@dataclass
+class Config:
+    limits: dict = field(default_factory=fetch_from_api)
+
+# REQUIRED — static defaults
+@dataclass
+class Config:
+    limits: dict = field(default_factory=dict)
+```
+
+**Incident**: `GovernorConfig(default_factory=fetch_hl_leverage_limits)` made network calls during dataclass construction, breaking CI and making tests non-deterministic.
+
+### Interface Contract Verification (Rule 44)
+
+```python
+# REQUIRED — every cross-component attribute access needs a test
+def test_recalibrator_output_matches_orchestrator_input():
+    result = recalibrator.compute(...)
+    assert hasattr(result, 'pct_change')  # orchestrator reads this
+    assert hasattr(result, 'sleeve_name')  # orchestrator reads this
+```
+
+**Incident**: The recalibrator produced `change_pct` but the orchestrator consumed `pct_change`. The silent mismatch (caught by bare except) meant the entire recalibration pipeline was a no-op.
+
+### State Persistence Round-Trip Tests (Rule 52)
+
+```python
+# REQUIRED — every save/load cycle must be verified
+def test_state_round_trip():
+    original = SystemState(positions=[...], equity=10000, pnl_history=[...])
+    save_state(original, path)
+    restored = load_state(path)
+    assert restored.positions == original.positions
+    assert restored.equity == original.equity
+    assert restored.pnl_history == original.pnl_history
+```
+
+**Incident**: Three critical fields were written by `save_state()` but ignored by `load_state()`. On restart: positions wiped, equity reset to default, PnL history lost.
+
+### Dead Code Audit Per PR (Rule 50)
+
+**Incident**: 19 dead modules accumulated over weeks of development. Each session added code but never removed unused paths. Methods like `check_health()`, `destroy_trade_manager()`, and `remove_a1_manager()` were defined but never called — pure dead code giving false confidence in coverage.
+
+### Candle Count Must Exceed Regime EMA (Rule 51)
+
+**Incident**: RENDER's signal engine used a 500-bar regime EMA, but the candle fetch only requested 300 bars. The regime gate was always in a cold-start state, producing incorrect signals for weeks.
 
 ---
 
-## Logging
+## Testing Standards
 
-### Rules
-- **Never use `print()`.** All output goes through `src.services.logger`.
-- Structured logging with consistent fields: `timestamp`, `level`, `module`, `message`, `context`
-- Log levels: `DEBUG` for signal computation, `INFO` for trades and state changes, `WARNING` for degraded conditions, `ERROR` for failures, `CRITICAL` for data loss or margin emergencies
+### Coverage Targets
 
-### What to Log
-- Every order submission and fill
-- Every signal computation result (at DEBUG)
-- Configuration loaded at startup
-- Rate limiter budget state (at DEBUG)
-- Connection events (connect, disconnect, reconnect)
+| Layer | Target | Rationale |
+|-------|--------|-----------|
+| Domain models | 100% branch | Pure logic, no excuses |
+| Port contracts | 100% method | Defines the system boundary |
+| Services | >90% branch | Core business logic |
+| Adapters | >80% | Network paths may be mocked |
+| Interface contracts | 100% | #1 bug category |
 
-### What Not to Log
-- Raw API responses (too verbose, potential secrets)
-- Full order book snapshots (high volume, low signal)
-- Internal loop iterations without state changes
+### Testing Principles
+
+1. **Strategy tests never touch the network.** All exchange interactions mocked through ports.
+2. **Deterministic data.** Tests produce identical results every run.
+3. **Test behavior, not implementation.** Assert on outputs and side effects.
+4. **Interface contract tests for every cross-component boundary.** Verifies attribute names match.
+5. **State round-trip tests for every persistent component.** save → load → assert equality.
+
+### Canonical Fee Model in Tests
+
+All backtests use `src/backtesting/fee_model.py`. Never hardcode fee rates in test scripts.
+
+**Rule 37 incident**: Three different fee rates appeared in three different test scripts. All were wrong. The canonical model reflects VIP-0 tiers (4.5 bps taker, 1.5 bps maker) and correctly credits zero-fee leverage changes.
+
+---
+
+## Logging Standards
+
+| Level | Use |
+|-------|-----|
+| DEBUG | Signal computation, rate limiter budget, indicator values |
+| INFO | Trades, state changes, configuration loaded |
+| WARNING | Degraded conditions, approaching limits, recovered errors |
+| ERROR | Failures requiring attention |
+| CRITICAL | Data loss, margin emergencies, liquidation proximity |
+
+What NOT to log: raw API responses (secrets risk), full order book snapshots (volume), internal loop iterations without state changes.
 
 ---
 
 ## Configuration Management
 
-### Principles
-1. **No hardcoded parameters in strategy code.** All thresholds, periods, and limits come from configuration.
-2. **Pydantic validation at load time.** Invalid configs fail fast with clear messages.
-3. **Environment variables for secrets.** Wallet keys, API keys, and addresses live in `.env`, never in config files.
-4. **Config versioning.** Every config change is tracked in git with a rationale in the commit message.
-
-### Config Structure
-```json
-{
-  "pillar": "P1",
-  "name": "BTC Treasury",
-  "enabled": true,
-  "leverage": 3,
-  "max_position_pct": 0.15,
-  "indicators": { ... },
-  "risk": {
-    "max_drawdown_pct": 0.12,
-    "stop_loss_pct": 0.05
-  }
-}
-```
+1. **No hardcoded parameters.** Every threshold, period, and limit in config files.
+2. **Pydantic validation at load time.** Invalid configs fail fast.
+3. **Environment variables for secrets.** Wallet keys in `.env`, never in config.
+4. **Atomic writes.** Config updates via tmp + rename to prevent partial writes.
+5. **Per-sleeve configs.** No one-size-fits-all — each sleeve has independent configuration.
 
 ---
 
 ## Change Hygiene
 
-### Commit Messages
+### Commit Convention
 ```
 <type>(<scope>): <description>
 
 Types: feat, fix, refactor, test, docs, infra, research
-Scopes: p1, p2, ..., p8, backtest, adapter, domain, ports, monitor, allocator, ci
+Scopes: btc, hype, short-basket, sor, backtest, governor, ...
 ```
 
-### Pull Request Requirements
-1. Descriptive title (not just the branch name)
-2. Summary of changes and rationale
-3. Test results (all passing)
-4. Architecture check passing
-5. Agent-ID if written by an AI agent
+### PR Requirements
+1. Descriptive title and rationale
+2. All tests passing
+3. Architecture conformance check passing
+4. Applied to longs: YES/NO. Applied to shorts: YES/NO. If NO, explain why not. (Rule 33)
+5. Dead code audit (Rule 50)
 
-### Code Review Checklist
-- [ ] Import boundaries respected
-- [ ] No `float` for financial values
-- [ ] No `print()` statements
-- [ ] Type hints complete
-- [ ] Tests cover new code paths
-- [ ] Config changes validated
-- [ ] No hardcoded parameters
+### Quantitative Claims
+Every quantitative claim requires a verification number:
+- **Banned**: "significant improvement", "better performance", "reduced fees"
+- **Required**: "+0.555 Sortino delta (1.09 → 1.645)", "$100.31/6mo (1% of equity)"
 
----
-
-## Golden Rules
-
-1. **Verify before reporting.** Run `agent_verify.sh` before claiming work is done.
-2. **Log every backtest.** Results go to `data/backtests/` — no exceptions.
-3. **Use wrapper scripts.** Never ad-hoc when a script exists.
-4. **One concern per edit.** Small, reviewable changes.
-5. **Never modify data by hand.** Databases and logs are append-only.
-6. **Never enable live trading without explicit approval.** Testnet first, always.
-7. **Structured logging only.** `src.services.logger`, never `print()`.
-8. **Specify scope for performance claims.** Pillar-level or system-level — they are different.
-9. **No orphan scripts.** Every script is registered and documented.
-10. **No structural anti-patterns.** Review these standards before writing logic.
+Unquantified claims are treated as unverified. This is Rule 35.

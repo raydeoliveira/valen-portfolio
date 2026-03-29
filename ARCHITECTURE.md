@@ -2,318 +2,264 @@
 
 ## Design Philosophy
 
-VALEN follows **Clean Architecture** (Ports & Adapters), a pattern refined across seven prior system versions (EISEN S1-S7). The core principle: domain logic must never depend on infrastructure. Exchange SDKs, databases, and CLI frameworks are implementation details that live behind abstract interfaces.
+VALEN follows **Clean Architecture** (Ports & Adapters), refined across seven prior system versions (EISEN S1-S7) and six months of continuous development on Hyperliquid. The core principle: domain logic never depends on infrastructure. Exchange SDKs, databases, and CLI frameworks are implementation details behind abstract interfaces.
 
-This is not architectural purism for its own sake. In algorithmic trading, the ability to swap execution backends (live exchange, paper trading, backtest engine) without touching strategy logic is a safety requirement. A strategy that works differently in backtest vs. live is a strategy you cannot trust.
+This is a safety requirement, not architectural purism. The backtest engine and the live adapter implement identical port contracts. If a strategy produces different behavior in backtest vs. live, that is a bug — not "market impact" or "execution slippage."
 
 ---
 
-## Layer Overview
+## 3-Layer Architecture
+
+VALEN separates trading logic into three layers with strict invariants that prevent dangerous coupling:
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                     Entry Points                              │
-│  CLI scripts, daemon processes, monitoring dashboard          │
-├──────────────────────────────────────────────────────────────┤
-│                    Services Layer                              │
-│  ┌──────────────┬──────────────┬──────────────────────────┐  │
-│  │ Strategy      │ Monitor &    │ Portfolio                 │  │
-│  │ Router        │ Alerts       │ Allocator                 │  │
-│  │ (P1-P8)       │ (6 types)    │ (5 methods)               │  │
-│  └──────────────┴──────────────┴──────────────────────────┘  │
-│  ┌──────────────┬──────────────┬──────────────────────────┐  │
-│  │ Indicators    │ Execution    │ Rate                      │  │
-│  │ (EMA, RSI,    │ Manager      │ Limiter                   │  │
-│  │  ATR, BB, ..) │              │                           │  │
-│  └──────────────┴──────────────┴──────────────────────────┘  │
-├──────────────────────────────────────────────────────────────┤
-│                   Ports (Abstract Contracts)                   │
-│  ExecutionPort │ MarketDataPort │ FundingPort │ RiskPort      │
-├──────────────────────────────────────────────────────────────┤
-│                   Adapters (Implementations)                  │
-│  ┌──────────────┬───────────────┬─────────────────────────┐  │
-│  │ Hyperliquid   │ Backtest      │ Paper Trading            │  │
-│  │ (Live REST    │ (Simulated    │ (Testnet-enforced        │  │
-│  │  + WebSocket)  │  execution)   │  execution)              │  │
-│  └──────────────┴───────────────┴─────────────────────────┘  │
-├──────────────────────────────────────────────────────────────┤
-│                    Domain Models                               │
-│  Candle │ Order │ Position │ Signal │ Fill │ FundingPayment   │
-│  AccountState │ OrderRequest │ Direction │ OrderType │ TIF    │
-└──────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                        Entry Points                                  │
+│  Orchestrator, paper trader, backtest harness, daemon processes      │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  Layer 1: SIGNAL GENERATION                                          │
+│  ┌────────────────────────────────────────────────────────────────┐ │
+│  │ Per-sleeve dual-EMA crossover + regime gate                    │ │
+│  │ 11 independent configurations (BTC, HYPE, SKY, Oil, ...)      │ │
+│  │ Direction decisions: 4h+ cadence ONLY                          │ │
+│  │ Sub-hourly modulation: adjusts SIZE, never DIRECTION           │ │
+│  │ Signal modes: dual_ema | always_long | independent_regime      │ │
+│  └────────────────────────────────────────────────────────────────┘ │
+│       │  Invariant: Sub-hourly direction changes are BANNED         │
+│       ▼  (0% pass rate across 800+ backtest configurations)         │
+│                                                                      │
+│  Layer 2: EXECUTION OPTIMIZATION                                     │
+│  ┌────────────────────────────────────────────────────────────────┐ │
+│  │ SmartOrderRouter with 6 microstructure gates                   │ │
+│  │ VPIN (0.25) · Kyle's Lambda (0.20) · Vol regime (0.20)        │ │
+│  │ TFI (0.15) · Cascade suppression (0.15) · RSI (0.05)         │ │
+│  │ Composite score → ALO maker (1.5 bps) or MARKET taker (4.5)  │ │
+│  └────────────────────────────────────────────────────────────────┘ │
+│       │  Invariant: L2 NEVER overrides L1 direction                 │
+│       ▼                                                              │
+│                                                                      │
+│  Layer 3: EVENT / SIZING                                             │
+│  ┌────────────────────────────────────────────────────────────────┐ │
+│  │ UnifiedEventEngine: calendar, cascade, governance, revenue     │ │
+│  │ TailRiskOverlay: drawdown-reactive defensive convexity         │ │
+│  │ MomentumSizer: trend-alignment boost (BTC, HYPE, RENDER)      │ │
+│  │ SmartMoneySizing: contrarian vault-flow modulation             │ │
+│  │ VaultConsensusOverlay: smart money conviction filter           │ │
+│  │ Hierarchical stacking: MAX(boosts), MIN(reductions)           │ │
+│  └────────────────────────────────────────────────────────────────┘ │
+│       │  Invariant: L3 scales size but NEVER flips direction        │
+│       ▼                                                              │
+│                                                                      │
+│  Portfolio Exposure Governor                                         │
+│  Correlation monitoring · DD multiplier · HL leverage clamp          │
+│  Per-sleeve exposure caps · Live leverage limits (15-min refresh)    │
+│                                                                      │
+├─────────────────────────────────────────────────────────────────────┤
+│                    Ports (Abstract Contracts)                         │
+│  ExecutionPort · MarketDataPort · FundingPort · RiskPort             │
+├─────────────────────────────────────────────────────────────────────┤
+│                    Adapters (Implementations)                        │
+│  ┌─────────────────┬────────────────┬────────────────────────────┐  │
+│  │ Hyperliquid Live │ Paper Trading  │ Backtest Engine             │  │
+│  │ (REST + WS)      │ (Testnet)      │ (Simulated execution)      │  │
+│  └─────────────────┴────────────────┴────────────────────────────┘  │
+├─────────────────────────────────────────────────────────────────────┤
+│                    Domain Models (Pydantic v2)                        │
+│  Candle · Order · Position · Signal · Fill · FundingPayment          │
+│  AccountState · Direction · OrderType · TimeInForce                  │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Port Interfaces
 
-The four ports define the complete boundary between VALEN's logic and the outside world. Every exchange interaction — order placement, data retrieval, risk check — passes through one of these interfaces.
+Four ports define the complete boundary between VALEN's logic and infrastructure.
 
 ### ExecutionPort
 
-Handles all order lifecycle operations.
+Handles order lifecycle, position queries, leverage management, and the dead man's switch:
 
 ```python
 class ExecutionPort(ABC):
-    # Single operations
     def place_order(self, order: OrderRequest) -> str: ...
     def cancel_order(self, coin: str, order_id: str) -> bool: ...
-
-    # Batch operations (up to 50 orders per call)
     def bulk_place_orders(self, orders: list[OrderRequest]) -> list[str]: ...
-    def bulk_cancel_orders(self, cancels: list[tuple[str, str]]) -> list[bool]: ...
-
-    # Position & account queries
     def get_position(self, coin: str) -> Position | None: ...
     def get_all_positions(self) -> list[Position]: ...
     def get_account_state(self) -> AccountState: ...
-    def get_open_orders(self, coin: str | None = None) -> list[dict]: ...
-    def get_fills(self, coin: str | None, start_time: datetime | None) -> list[dict]: ...
-
-    # Configuration
-    def update_leverage(self, coin: str, leverage: int, is_cross: bool = True) -> bool: ...
-    def get_mark_price(self, coin: str) -> Decimal: ...
-
-    # Safety
+    def update_leverage(self, coin: str, leverage: int, is_cross: bool) -> bool: ...
     def schedule_cancel(self, timeout_seconds: int) -> bool: ...  # Dead man's switch
 ```
 
-Design notes:
-- `schedule_cancel` implements a dead man's switch. If the process crashes without renewing the timer, all open orders are automatically cancelled by the exchange.
-- Batch operations are critical for grid strategies (P3) that manage dozens of resting orders simultaneously.
-- `get_all_positions()` exists separately from `get_position()` because portfolio-level operations (allocator, monitor) need the full picture without N+1 queries.
+Design note: `update_leverage()` has **zero trading fees** on Hyperliquid. This enables fee-free rebalancing — a structural advantage over traditional exchanges where rebalancing costs taker fees on every adjustment.
 
 ### MarketDataPort
 
-Covers all read-only market data access.
+Read-only market data access with batch efficiency:
 
 ```python
 class MarketDataPort(ABC):
-    # OHLCV data
-    def get_candles(self, coin: str, interval: str, start_time: datetime,
-                    end_time: datetime | None = None) -> list[Candle]: ...
-
-    # Prices
-    def get_current_price(self, coin: str) -> Decimal: ...
-    def get_all_mids(self) -> dict[str, Decimal]: ...
-    def get_oracle_price(self, coin: str) -> Decimal: ...
-    def get_mark_price(self, coin: str) -> Decimal: ...  # via ExecutionPort in practice
-
-    # Order book
-    def get_l2_snapshot(self, coin: str, depth: int = 20) -> dict: ...
-
-    # Funding
-    def get_funding_history(self, coin: str, start_time: datetime,
-                            end_time: datetime | None = None) -> list[FundingPayment]: ...
+    def get_candles(self, coin: str, interval: str, start: datetime, end: datetime) -> list[Candle]: ...
+    def get_all_mids(self) -> dict[str, Decimal]: ...    # Single call for full universe
+    def get_l2_snapshot(self, coin: str, depth: int) -> dict: ...
     def get_funding_rate(self, coin: str) -> Decimal: ...
-
-    # Market structure
     def get_open_interest(self, coin: str) -> Decimal: ...
-    def get_recent_trades(self, coin: str, limit: int = 100) -> list[dict]: ...
-    def get_meta(self) -> dict: ...
 ```
 
-Design notes:
-- `get_all_mids()` returns all coin prices in a single call — essential for cross-sectional strategies (P5 momentum) that need to rank the full universe without hitting rate limits.
-- Oracle price is separated from mark price because they differ and serve different purposes (funding calculation vs. PnL marking).
+Design note: `get_all_mids()` returns all prices in a single API call — critical for cross-sectional operations (short basket ranking, correlation monitoring) without O(N) rate limit consumption.
 
-### FundingPort
+### FundingPort & RiskPort
 
-Dedicated port for funding rate operations, separated from MarketDataPort to allow independent composition and testing of funding-heavy strategies (P4 Funding Arb).
+Separated from MarketDataPort to allow independent composition and testing:
 
 ```python
 class FundingPort(ABC):
-    def get_funding_rate(self, coin: str) -> Decimal: ...
     def get_predicted_funding_rate(self, coin: str) -> Decimal: ...
-    def get_funding_history(self, coin: str, start_time: datetime,
-                            end_time: datetime | None = None) -> list[FundingPayment]: ...
-    def get_user_funding(self, address: str, start_time: datetime) -> list[FundingPayment]: ...
-```
+    def get_user_funding(self, address: str, start: datetime) -> list[FundingPayment]: ...
 
-Design notes:
-- `get_predicted_funding_rate` is distinct from the current rate. The prediction is based on the real-time premium index and can differ significantly from the settled rate.
-- `get_user_funding` returns realized cashflows (position-size-weighted), not market-level rates. This distinction matters for PnL attribution.
-
-### RiskPort
-
-Pre-trade and portfolio-level risk queries.
-
-```python
 class RiskPort(ABC):
-    def check_margin_sufficient(self, coin: str, additional_size: Decimal,
-                                 leverage: int) -> bool: ...
+    def check_margin_sufficient(self, coin: str, size: Decimal, leverage: int) -> bool: ...
     def get_liquidation_price(self, coin: str) -> Decimal | None: ...
-    def get_max_position_size(self, coin: str, leverage: int) -> Decimal: ...
     def get_portfolio_margin_ratio(self) -> Decimal: ...
 ```
 
-Design notes:
-- `check_margin_sufficient` is a pre-trade gate. Strategies call this before submitting orders. It does not reserve margin.
-- `get_portfolio_margin_ratio` returns `used_margin / total_equity`. Approaching 1.0 means the account is near liquidation. The monitor uses this for margin alerts.
+---
+
+## SmartOrderRouter (Layer 2)
+
+The SOR replaces the naive "always use market orders" approach with microstructure-aware routing:
+
+```
+Signal from L1
+    │
+    ▼
+┌──────────────────────────────────────┐
+│  6 Microstructure Gates (parallel)   │
+│                                      │
+│  VPIN ─────────────── 0.25 ──┐       │
+│  Kyle's Lambda ─────  0.20 ──┤       │
+│  Vol regime ─────────  0.20 ──┤       │
+│  TFI ───────────────  0.15 ──┼──▶ Composite  ──▶  < 0.50: ALO (maker)
+│  Cascade suppression  0.15 ──┤       score          ≥ 0.50: MARKET (taker)
+│  RSI suppression ──── 0.05 ──┘                      URGENT: bypass → MARKET
+└──────────────────────────────────────┘
+```
+
+**Why this matters**: At VIP-0 tier, maker fees (1.5 bps) are 3x cheaper than taker fees (4.5 bps). Over a 6-month period with typical trading activity, intelligent routing saves measurable basis points — and in a system optimizing for Sortino, fee savings directly improve the ratio.
+
+The SOR also includes a health monitor (thread-safe routing statistics) and delay enforcement: when gates recommend delay, the SOR returns a sentinel (not a real fill), and the orchestrator retries on the next evaluation cycle.
 
 ---
 
-## Strategy Router Pattern
+## Hierarchical Sizing (Layer 3)
 
-Each strategy pillar (P1-P8) is a self-contained module that:
-
-1. Receives market data through ports
-2. Computes signals using the indicator library
-3. Generates `OrderRequest` objects
-4. Submits orders through the execution port
-
-The router dispatches candle updates to active pillars based on configuration. Pillars do not communicate with each other directly — capital allocation across pillars is handled by the portfolio allocator at a higher level.
+Position sizing from multiple overlays is combined using a hierarchical rule that prevents dangerous leverage compounding:
 
 ```
-Candle Update
-    │
-    ▼
-┌─────────┐     ┌────────────┐
-│  Router  │────▶│  P1: BTC   │──▶ OrderRequest
-│          │     │  Treasury   │
-│          │     ├────────────┤
-│          │────▶│  P2: Short │──▶ OrderRequest
-│          │     │  Hedge     │
-│          │     ├────────────┤
-│          │────▶│  P3: Grid  │──▶ [OrderRequest, ...]  (batch)
-│          │     │  Perp      │
-│          │     ├────────────┤
-│          │────▶│  ...       │
-└─────────┘     └────────────┘
-                      │
-                      ▼
-              ExecutionPort.place_order()
-              or .bulk_place_orders()
+MomentumSizer:        +20% boost  ─┐
+SmartMoneySizing:     +30% boost  ─┤──▶  MAX(+20%, +30%) = +30% boost
+VaultConsensus:       +15% boost  ─┘     (not +65% sum)
+
+TailRiskOverlay:      0.7x reduce ─┐
+CalendarGate:         0.8x reduce ─┤──▶  MIN(0.7x, 0.8x) = 0.7x reduce
+CascadeDetector:      0.9x reduce ─┘     (most cautious wins)
+
+Final sizing = base × (1.0 + 0.30) × 0.7 = base × 0.91
 ```
 
-### Pillar Isolation
-
-Each pillar:
-- Has its own configuration (leverage, position limits, indicators, thresholds)
-- Manages its own state (current position, pending orders, signal history)
-- Has independent kill criteria (max drawdown, loss streak, Sortino floor)
-- Can be enabled/disabled without affecting other pillars
-
-This isolation is enforced architecturally, not by convention. A pillar cannot access another pillar's state or configuration.
+This is a deliberate design choice. Four small boosts at +15% each would compound to +74% with multiplicative stacking — producing dangerous leverage that no single overlay intended. The hierarchical rule caps the upside while preserving full defensive benefit.
 
 ---
 
-## Backtest Engine Design
+## Short Basket Architecture
 
-The backtest engine implements the same port contracts as the live adapter, meaning strategies run identically in backtest and live modes. The only difference is the data source and execution simulation.
+### Euphoria-Fade Entry Scoring
 
-### Event Flow
+The short basket inverts the conventional scoring model: instead of momentum-following, it **fades euphoria**. High momentum, ATH proximity, elevated social sentiment, and funding spikes are bullish crowd indicators that predict reversals.
 
-```
-Historical Candles (SQLite or CSV)
-    │
-    ▼
-┌──────────────────┐
-│  BacktestEngine   │
-│                    │
-│  For each candle:  │
-│  1. Update prices  │
-│  2. Check stops    │──▶ Simulated fills (with slippage model)
-│  3. Settle funding │──▶ 8-hour funding payment simulation
-│  4. Check liq.     │──▶ Liquidation detection (margin-based)
-│  5. Route candle   │──▶ Strategy generates orders
-│  6. Execute orders │──▶ Simulated execution (market/limit/ALO)
-│  7. Update equity  │
-└──────────────────┘
-    │
-    ▼
-BacktestResult
-  ├── Equity curve
-  ├── Trade log
-  ├── Metrics (Sortino, Omega, Calmar, STARR, max DD, ...)
-  └── Funding PnL breakdown
-```
+### 6-Factor Weekly Rescore
 
-### Perp-Native Features
+The 229-coin Hyperliquid universe is rescored weekly:
 
-Unlike a simple spot backtester, VALEN's engine models:
+1. **Beta to BTC** — higher beta = better short candidate (amplifies bear moves)
+2. **Funding rate** — positive funding = crowd long = contrarian short edge
+3. **24h volume** — liquidity filter (minimum threshold for executable size)
+4. **Realized volatility** — position sizing input (inverse-vol weighting)
+5. **BTC correlation** — higher correlation = better hedge effectiveness
+6. **Coinalyze L/S ratio** — crowd positioning (contrarian boost when L/S > 70%)
 
-- **Funding payments**: Simulated every 8 hours based on historical funding rates. Long positions pay (or receive) funding; short positions receive (or pay).
-- **Liquidation detection**: Tracks margin ratio per-bar. If mark price crosses the liquidation threshold, the position is force-closed at a penalty.
-- **7-tier fee model**: Matches Hyperliquid's volume-based fee schedule. Maker/taker fees decrease with 30-day volume.
-- **Leverage and margin**: Tracks notional exposure, required margin, and free margin throughout the simulation.
-- **ALO (Add Liquidity Only)**: Grid strategy orders use ALO to guarantee maker fees. The engine rejects ALO orders that would cross the spread.
+Output: 25-coin basket, inverse-volatility weighted.
+
+### 3-Tier Loss Management
+
+| Tier | Scope | Mechanism | Frequency |
+|------|-------|-----------|-----------|
+| T1 | Per-coin | 6-factor score modulates weight continuously | Every evaluation bar |
+| T2 | Basket | Rescore universe, replace weakest 10 positions | Weekly |
+| T3 | Per-coin | ATR-scaled emergency hard stop | Continuous |
+
+VRULE-019 proved that no single tier suffices. Every rotation strategy tested was liquidated in the 2024-2025 bull market when tested full-cycle. The 3-tier approach provides defense in depth where each tier catches what the others miss.
 
 ---
 
-## Data Flow
+## Data Architecture (3-Tier Isolation)
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      Data Sources                            │
-│  ┌──────────────┐  ┌────────────┐  ┌─────────────────────┐ │
-│  │ HL REST API   │  │ HL WS Feed │  │ S3 Archive (hist.)  │ │
-│  └──────┬───────┘  └─────┬──────┘  └──────────┬──────────┘ │
-└─────────┼────────────────┼─────────────────────┼────────────┘
-          │                │                     │
-          ▼                ▼                     ▼
-    ┌─────────────────────────────────────────────────┐
-    │              Rate Limiter                        │
-    │  (IP weight budget + per-address budget)         │
-    │  Thread-safe, auto-refilling token buckets       │
-    └──────────────────────┬──────────────────────────┘
-                           │
-                           ▼
-    ┌─────────────────────────────────────────────────┐
-    │              SQLite Database                     │
-    │  ┌──────────┬──────────┬──────────┬──────────┐ │
-    │  │ Candles   │  Fills   │ Funding  │ Positions│ │
-    │  └──────────┴──────────┴──────────┴──────────┘ │
-    └──────────────────────┬──────────────────────────┘
-                           │
-              ┌────────────┼────────────┐
-              ▼            ▼            ▼
-        ┌──────────┐ ┌──────────┐ ┌──────────┐
-        │ Backtest  │ │ Strategy │ │ Monitor  │
-        │ Engine    │ │ Router   │ │ Dashboard│
-        └──────────┘ └──────────┘ └──────────┘
+┌─────────────────────────────────────────────────┐
+│  COLD TIER (Archive)                             │
+│  hl_archive.db: 208M+ rows, 38 GB               │
+│  Purpose: Backtesting ONLY                       │
+│  Access: Read-only, busy_timeout=30s, LIMIT      │
+├─────────────────────────────────────────────────┤
+│  WARM TIER (Daemon DBs)                          │
+│  18 databases: candles, OI, funding, L2, etc.    │
+│  Purpose: Production signal computation          │
+│  Access: Read-write, WAL mode                    │
+├─────────────────────────────────────────────────┤
+│  HOT TIER (Live API)                             │
+│  Hyperliquid REST + WebSocket                    │
+│  Purpose: Execution, real-time prices            │
+│  Access: Rate-limited (IP weight + address)      │
+└─────────────────────────────────────────────────┘
 ```
 
-### Rate Limiter Design
-
-Hyperliquid enforces two rate limit budgets:
-- **IP weight**: Shared across all requests from the same IP
-- **Address weight**: Per-wallet request budget
-
-The rate limiter uses thread-safe token buckets with automatic refill. Every adapter method acquires tokens before making an API call. If the budget is exhausted, the call blocks until tokens refill — no request is ever dropped or retried blindly.
+**Key rule**: Never propose reading the 38 GB archive in production. Never use warm-tier daemon data for backtesting. The tier boundaries exist because mixing them produces either (a) production latency from archive queries or (b) backtest data snooping from warm-tier leakage.
 
 ---
 
 ## Configuration Architecture
 
-All configuration uses Pydantic v2 models with environment variable support:
+All configuration uses Pydantic v2 models with environment variable support and validation at startup:
 
 ```
 config/
-├── system.json          # Global settings (database path, log level, testnet flag)
-├── pillars/
-│   ├── p1_btc_treasury.json
-│   ├── p2_short_hedge.json
-│   ├── p3_grid_perp.json
-│   └── ...
-└── allocator.json       # Portfolio allocator method and weights
+├── portfolio_production.json     # Master config (11 sleeves, weights, leverages)
+├── sleeve_btc.json               # Per-sleeve: EMA periods, regime gate, modulation
+├── sleeve_hype.json
+├── sleeve_oil.json
+├── sleeve_c_short_basket.json    # Short basket: scoring weights, rotation schedule
+├── fee_model.json                # Canonical fees (taker 4.5 bps, maker 1.5 bps)
+└── ...
 ```
 
-Configuration is validated at startup. Invalid configs fail fast with clear error messages rather than silently defaulting.
+**No hardcoded parameters in strategy code.** Every threshold, EMA period, leverage limit, and fee rate comes from configuration. This is enforced by code review, not convention.
 
 ---
 
-## Testing Strategy
+## Testing Architecture
 
-Tests are organized by architectural layer:
+Tests organized by architectural layer, with 4,542 tests across 257 files:
 
-| Layer | Test Type | Example |
-|-------|-----------|---------|
-| Domain | Unit tests | Model validation, enum behavior, serialization |
-| Ports | Contract tests | Verify port ABCs define expected methods |
-| Adapters | Integration tests | HL adapter against testnet (mocked in CI) |
-| Services | Unit + integration | Strategy signal generation, indicator math |
-| Backtest | Property tests | Equity curve monotonicity under zero-fee conditions |
-| System | End-to-end | Full backtest run with all pillars active |
+| Layer | Test Type | Count | Example |
+|-------|-----------|-------|---------|
+| Domain | Unit | ~200 | Model validation, enum behavior, Decimal precision |
+| Ports | Contract | ~50 | Port ABCs define expected methods |
+| Services | Unit + integration | ~2,500 | Signal generation, SOR routing, sizing math |
+| Backtesting | Property + integration | ~800 | Fee model accuracy, equity monotonicity under zero-fee |
+| Infrastructure | Integration | ~500 | Adapter behavior, DB access, rate limiting |
+| Interface contracts | Boundary | ~200 | Attribute name verification between components |
+| System | End-to-end | ~100 | Full backtest with all sleeves active |
 
-Key testing principle: **strategy tests never touch the network.** All exchange interactions are mocked through the port interfaces. This is why Clean Architecture matters — it makes strategies fully testable in isolation.
+Key principle: **Interface contract tests verify attribute names match between producer and consumer.** This prevents the silent integration failures (wrong attribute names, caught by bare `except`) that were the #1 bug category discovered during a 15-agent deep audit.
