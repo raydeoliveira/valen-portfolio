@@ -10,7 +10,7 @@
 
 # VALEN — Multi-Asset Algorithmic Trading System
 
-**A 3-layer, 11-sleeve algorithmic trading system for Hyperliquid DEX perpetual futures. Built with Clean Architecture, rigorous quantitative research (900+ backtests, 81 hypotheses), and AI-augmented development at scale (763+ PRs, 4,500+ tests).**
+**A 3-layer, 11-sleeve algorithmic trading system for Hyperliquid DEX perpetual futures. Built with Clean Architecture, rigorous quantitative research (900+ backtests, 81 hypotheses), and AI-augmented development at scale (763+ PRs, 3,600+ tests).**
 
 > This is a portfolio showcase. The full codebase lives in a private repository.
 
@@ -31,8 +31,8 @@
 | Dimension | Detail |
 |-----------|--------|
 | Architecture | 3-layer (Signal → Execution → Event/Sizing), 11 independent sleeves |
-| Tests | **4,542** across 257 test files |
-| PRs merged | **763+** across 6 months of continuous development |
+| Tests | **3,610** across 256 test files |
+| PRs merged | **775+** across 6 months of continuous development |
 | Research rigor | **81 hypotheses** tested, **21 dead-end verdicts** (VRULEs), **900+ backtests** |
 | Data infrastructure | 28 collection daemons, 208M+ rows, 18 SQLite databases |
 | Optimization | Sortino(gamma=2) primary — Sharpe is structurally wrong for crypto |
@@ -113,7 +113,19 @@ Adapters                        ← Hyperliquid SDK, paper trading, backtest eng
 
 The backtest engine and the live trading adapter implement identical port contracts. A strategy that produces different behavior in backtest vs. live is a strategy with a bug, not a strategy with "market impact."
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the complete design.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the complete design, or browse the [source code samples](src/) included in this repository.
+
+### Code Samples (Public)
+
+This repository includes selected source code demonstrating engineering quality:
+
+| Path | What It Shows |
+|------|--------------|
+| [`src/domain/models.py`](src/domain/models.py) | Pydantic v2 domain models — `Decimal` for all financial values, frozen immutability, clean serialization |
+| [`src/ports/`](src/ports/) | 4 abstract port interfaces — the complete boundary between logic and infrastructure |
+| [`src/backtesting/fee_model.py`](src/backtesting/fee_model.py) | Canonical fee model — single source of truth, self-validating, zero-fee leverage awareness |
+
+These are production files from the private repository. Signal parameters, allocation weights, and scoring formulas are not included.
 
 ---
 
@@ -231,11 +243,12 @@ All backtests use a canonical fee model reflecting VIP-0 tiers: 4.5 bps taker, 1
 
 | Metric | Value |
 |--------|-------|
-| PRs merged | **763+** |
-| Tests | **4,542** across 257 files |
+| PRs merged | **775+** |
+| Tests | **3,610** across 256 files |
+| Active source LOC | **~106K** (36,658 LOC dead code archived) |
 | Agent contract rules | **53** (evolved from 10 initial rules) |
 | Research verdicts (VRULEs) | **21** |
-| Total commits | **1,200+** |
+| Active source LOC | **~106K** (36,658 LOC dead code archived) |
 | Development period | 6 months continuous |
 
 ### Multi-Agent Coordination
@@ -282,7 +295,7 @@ See [ENGINEERING_STANDARDS.md](ENGINEERING_STANDARDS.md) for the full standards 
 | Data | pandas, numpy, scipy |
 | Exchange SDK | hyperliquid-python-sdk |
 | Database | SQLite (WAL mode, 18 databases) |
-| Testing | pytest (4,542 tests) |
+| Testing | pytest (3,610 tests) |
 | Linting | ruff, mypy --strict |
 | CI/CD | GitHub Actions |
 | Deployment | launchd daemons (28), ChartVPS |

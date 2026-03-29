@@ -4,7 +4,7 @@
 
 VALEN was built and is continuously developed using **coordinated AI agents** operating in parallel sessions over 6 months. This is not "AI-assisted coding" — it is a structured multi-agent system with defined isolation boundaries, coordination protocols, and an evolving rule set that grows from production incidents.
 
-The result: **763+ PRs merged, 4,542 tests, 53 agent contract rules, 21 research verdicts** — a system that is defined as much by its development process as by its trading logic.
+The result: **775+ PRs merged, 3,610 tests, 53 agent contract rules, 21 research verdicts** — a system that is defined as much by its development process as by its trading logic.
 
 ---
 
@@ -12,8 +12,8 @@ The result: **763+ PRs merged, 4,542 tests, 53 agent contract rules, 21 research
 
 | Metric | Early (Month 1) | Current (Month 6) |
 |--------|-----------------|-------------------|
-| PRs merged | 18 | **763+** |
-| Tests | 497 | **4,542** |
+| PRs merged | 18 | **775+** |
+| Tests | 497 | **3,610** (was 4,542 before dead code archive) |
 | Agent contract rules | 10 | **53** |
 | Data daemons | 0 | **28** |
 | Research hypotheses | 0 | **81** |
@@ -84,6 +84,19 @@ The progression from 10 to 53 rules also demonstrates the system's ability to le
 
 ---
 
+## Dead Code Archival: 36,658 LOC Removed
+
+One of the most significant engineering health milestones: a single PR (#774) archived 36,658 lines of dead code — dead modules, stale allocators, superseded orchestrators, and tests that only tested dead code.
+
+**Before**: 4,542 tests, ~142K LOC active source.
+**After**: 3,610 tests, ~106K LOC active source.
+
+The test count dropped by ~900 — but every removed test was testing dead code. This is healthy: the codebase got leaner without losing any coverage of living code. The metrics honestly reflect the change rather than preserving inflated numbers.
+
+This archival was prompted by a red-team audit (#769) that identified architecture drift — documentation and code diverging over months of rapid development. The red-team audit also caught that governor sleeve_multipliers were computed but never propagated to the sizing pipeline (a no-op bug), which was fixed in #771/#772.
+
+---
+
 ## Deep Audit: 15-Agent Parallel Bug Hunt
 
 The most ambitious multi-agent operation was a 15-agent deep audit that found **53 bugs** across the full codebase. Each agent was assigned a specific audit scope:
@@ -136,6 +149,7 @@ Each session type has different agent configurations, verification requirements,
 3. **Silent exception handling hid critical bugs for weeks.** Now banned via Rule 45.
 4. **Dead code accumulated without active cleanup.** Now audited per PR via Rule 50.
 5. **Aggregate signals masked per-asset opportunities.** Per-asset decomposition is now Rule 39.
+6. **Dead code accumulates without active pruning.** A single archival PR (#774) removed 36,658 LOC of dead modules, stale allocators, and superseded orchestrators. Test count dropped from 4,542 to 3,610 — every removed test was testing dead code. This is healthy: it means the codebase got leaner, not that coverage regressed.
 
 ### Key Insight
 
