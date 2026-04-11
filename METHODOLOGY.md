@@ -2,7 +2,7 @@
 
 ## Philosophy
 
-Every design decision in VALEN is treated as a hypothesis to be tested, not an opinion to be defended. This methodology was forged through EISEN's development (7 system versions, 4 strategy eliminations, hundreds of backtests) and hardened through VALEN's own research program: **81 hypotheses tested, 21 dead-end verdicts, 900+ backtests** across 6 months.
+Every design decision in VALEN is treated as a hypothesis to be tested, not an opinion to be defended. This methodology was forged through EISEN's development (7 system versions, 4 strategy eliminations, hundreds of backtests) and hardened through VALEN's own research program: **81 hypotheses tested, 21 dead-end verdicts, 900+ backtests**.
 
 The core principle: **a strategy that cannot be killed by its own test plan is not being tested rigorously enough.**
 
@@ -171,8 +171,8 @@ Every signal, threshold, modulation frequency, and stop width performs better wh
 |-----------|----------------|-------------------|
 | Vol modulation | Portfolio-level vol | Per-sleeve vol regime |
 | Short basket | Aggregate activation | Per-coin momentum/funding/OI |
-| Stops | Fixed 1.5% for all | ATR-scaled (HYPE 2.0x, PAXG 3.0x) |
-| Modulation frequency | Uniform 4h | Per-asset (BTC 1h, HYPE 15m, PAXG 4h) |
+| Stops | Fixed 1.5% for all | ATR-scaled per asset |
+| Modulation frequency | Uniform 4h | Per-asset (varies by liquidity/vol) |
 | Recalibration | Portfolio-wide grid | Per-sleeve parameter sweeps |
 
 This finding is encoded as Rule 39: every new mechanism must ask "Does this use an aggregate signal where a per-asset signal would be more precise?"

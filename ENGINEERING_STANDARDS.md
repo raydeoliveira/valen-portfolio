@@ -116,9 +116,13 @@ def test_state_round_trip():
 
 **Incident**: 19 dead modules accumulated over weeks of development. Each session added code but never removed unused paths. Methods like `check_health()`, `destroy_trade_manager()`, and `remove_a1_manager()` were defined but never called — pure dead code giving false confidence in coverage.
 
-### Candle Count Must Exceed Regime EMA (Rule 51)
+### Candle Count Must Exceed Indicator Lookback (Rule 51)
 
 **Incident**: RENDER's signal engine used a 500-bar regime EMA, but the candle fetch only requested 300 bars. The regime gate was always in a cold-start state, producing incorrect signals for weeks.
+
+### Data Plane Verification (Rules 58-62)
+
+**Incident**: After deploying to mainnet, internal equity tracking was 17x wrong because sleeve equity was computed from config weights instead of actual exchange margin allocations. Rules 58-62 enforce reconciliation between internal state and exchange-reported state at multiple checkpoints.
 
 ---
 
@@ -171,6 +175,7 @@ What NOT to log: raw API responses (secrets risk), full order book snapshots (vo
 3. **Environment variables for secrets.** Wallet keys in `.env`, never in config.
 4. **Atomic writes.** Config updates via tmp + rename to prevent partial writes.
 5. **Per-sleeve configs.** No one-size-fits-all — each sleeve has independent configuration.
+6. **109 config files** managed across sleeves, signal parameters, recalibration, and deployment.
 
 ---
 
@@ -186,10 +191,11 @@ Scopes: btc, hype, short-basket, sor, backtest, governor, ...
 
 ### PR Requirements
 1. Descriptive title and rationale
-2. All tests passing
+2. All tests passing (4,376 tests)
 3. Architecture conformance check passing
-4. Applied to longs: YES/NO. Applied to shorts: YES/NO. If NO, explain why not. (Rule 33)
-5. Dead code audit (Rule 50)
+4. Applied to longs: YES/NO. Applied to shorts: YES/NO. If NO, explain why not.
+5. Dead code audit
+6. Quantitative claims require verification numbers
 
 ### Quantitative Claims
 Every quantitative claim requires a verification number:

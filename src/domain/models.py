@@ -246,7 +246,7 @@ class Signal(BaseModel):
     Attributes:
         timestamp: Signal generation time (UTC).
         coin: Asset symbol this signal applies to.
-        pillar: Originating sleeve identifier, e.g. "VALEN Sleeve-BTC".
+        sleeve: Originating sleeve identifier, e.g. "VALEN Sleeve-BTC".
         direction: LONG, SHORT, or FLAT.
         strength: Signal strength in [0.0, 1.0]. 1.0 = maximum conviction.
         reason: Human-readable explanation of why the signal was generated.
@@ -259,7 +259,7 @@ class Signal(BaseModel):
 
     timestamp: datetime
     coin: str
-    pillar: str
+    sleeve: str
     direction: Direction
     strength: float = 1.0
     reason: str = ""

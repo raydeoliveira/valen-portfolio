@@ -2,26 +2,29 @@
 
 ## Overview
 
-VALEN was built and is continuously developed using **coordinated AI agents** operating in parallel sessions over 6 months. This is not "AI-assisted coding" — it is a structured multi-agent system with defined isolation boundaries, coordination protocols, and an evolving rule set that grows from production incidents.
+VALEN was built and is continuously developed using **coordinated AI agents** operating in parallel sessions. This is not "AI-assisted coding" — it is a structured multi-agent system with defined isolation boundaries, coordination protocols, and an evolving rule set that grows from production incidents.
 
-The result: **775+ PRs merged, 3,610 tests, 53 agent contract rules, 21 research verdicts** — a system that is defined as much by its development process as by its trading logic.
+The result: **905+ PRs merged, 4,376 tests, 62 agent contract rules, 21 research verdicts** — a production system that is defined as much by its development process as by its trading logic.
 
 ---
 
 ## Scale
 
-| Metric | Early (Month 1) | Current (Month 6) |
-|--------|-----------------|-------------------|
-| PRs merged | 18 | **775+** |
-| Tests | 497 | **3,610** (was 4,542 before dead code archive) |
-| Agent contract rules | 10 | **53** |
+| Metric | Early (Month 1) | Current |
+|--------|-----------------|---------|
+| PRs merged | 18 | **905+** |
+| Tests | 497 | **4,376** across 323 files |
+| Agent contract rules | 10 | **62** |
 | Data daemons | 0 | **28** |
 | Research hypotheses | 0 | **81** |
 | Dead-end verdicts (VRULEs) | 0 | **21** |
 | Backtests logged | ~50 | **900+** |
+| Config files | ~10 | **109** |
+| System status | Paper trading | **Live on mainnet** |
+| Deployment | Local daemons | **AWS EC2, systemd** |
 | Development model | Sprint-based | Continuous parallel sessions |
 
-The "Month 1" numbers reflect the initial wave-based sprint that built the foundation. The "Month 6" numbers reflect continuous evolution — each session adding capability, discovering bugs, tightening rules, and killing bad ideas with evidence.
+The "Month 1" numbers reflect the initial wave-based sprint that built the foundation. The current numbers reflect continuous evolution — each session adding capability, discovering bugs, tightening rules, and killing bad ideas with evidence.
 
 ---
 
@@ -48,15 +51,15 @@ Every PR must pass `agent_verify.sh` (lint + type check + tests + architecture c
 
 ---
 
-## The 53-Rule Agent Contract
+## The 62-Rule Agent Contract
 
-The agent contract is the most important artifact of the AI development process. It started with 10 basic rules and grew to 53 through a feedback loop: every production incident or research failure spawns a new rule that prevents recurrence.
+The agent contract is the most important artifact of the AI development process. It started with 10 basic rules and grew to 62 through a feedback loop: every production incident or research failure spawns a new rule that prevents recurrence.
 
 ### Rule Evolution Timeline
 
 **Rules 1-10 (Foundation):** Basic hygiene — run verification before reporting, log backtests, use wrapper scripts, never enable live trading without approval.
 
-**Rules 11-28 (Research discipline):** Added as research methodology matured — hypothesis registry, frequency audits, per-asset decomposition, terminology standardization ("sleeves" not "pillars"), data tier isolation.
+**Rules 11-28 (Research discipline):** Added as research methodology matured — hypothesis registry, frequency audits, per-asset decomposition, terminology standardization, data tier isolation, Hyperliquid-specific constraints.
 
 **Rules 29-38 (Research failure prevention):** Each rule prevents a specific failure that actually occurred:
 - **Rule 29**: Never claim system-level Sortino from component tests (happened: ad-hoc script testing 2 modules claimed system-level results)
@@ -76,24 +79,25 @@ The agent contract is the most important artifact of the AI development process.
 - **Rule 50**: Dead code audit per PR (19 dead modules accumulated over weeks)
 - **Rule 52**: State persistence round-trip tests (positions wiped, equity reset, PnL lost — all from save/load asymmetry)
 
+**Rules 54-62 (Live deployment + data plane):** Added after deploying to mainnet with real capital:
+- **Rules 54-57**: Deployment verification and incident review — mandatory pre/post-deploy checklists, incident post-mortems with rule additions
+- **Rules 58-62**: Data plane verification — production data must match expected schema, stale data detection, reconciliation between exchange state and internal state
+
 ### Why This Matters for Engineering Leaders
 
 The rule set is a living document of **organizational learning encoded as automated constraints**. In a human team, this knowledge lives in tribal memory and code review judgment. In an AI-augmented system, it must be explicit — every lesson learned becomes a rule that applies to every future session, regardless of which agent picks up the work.
 
-The progression from 10 to 53 rules also demonstrates the system's ability to learn from its own failures. Each rule has a documented incident that motivated it, making the contract simultaneously a policy document and a post-mortem archive.
+The progression from 10 to 62 rules also demonstrates the system's ability to learn from its own failures. Each rule has a documented incident that motivated it, making the contract simultaneously a policy document and a post-mortem archive.
 
 ---
 
 ## Dead Code Archival: 36,658 LOC Removed
 
-One of the most significant engineering health milestones: a single PR (#774) archived 36,658 lines of dead code — dead modules, stale allocators, superseded orchestrators, and tests that only tested dead code.
-
-**Before**: 4,542 tests, ~142K LOC active source.
-**After**: 3,610 tests, ~106K LOC active source.
+One of the most significant engineering health milestones: a single PR archived 36,658 lines of dead code — dead modules, stale allocators, superseded orchestrators, and tests that only tested dead code.
 
 The test count dropped by ~900 — but every removed test was testing dead code. This is healthy: the codebase got leaner without losing any coverage of living code. The metrics honestly reflect the change rather than preserving inflated numbers.
 
-This archival was prompted by a red-team audit (#769) that identified architecture drift — documentation and code diverging over months of rapid development. The red-team audit also caught that governor sleeve_multipliers were computed but never propagated to the sizing pipeline (a no-op bug), which was fixed in #771/#772.
+This archival was prompted by a red-team audit that identified architecture drift — documentation and code diverging over months of rapid development. The red-team audit also caught that governor sleeve_multipliers were computed but never propagated to the sizing pipeline (a no-op bug).
 
 ---
 
@@ -103,7 +107,7 @@ The most ambitious multi-agent operation was a 15-agent deep audit that found **
 
 | Agent | Scope | Bugs Found |
 |-------|-------|------------|
-| Signal integrity | L1 signal engines | 5 (Oil/RENDER never fired, EMA config dead code) |
+| Signal integrity | L1 signal engines | 5 (sleeves never fired, EMA config dead code) |
 | Execution layer | SOR + routing | 4 (health monitor thread safety, gate miscalculation) |
 | State persistence | Save/load cycle | 3 (positions wiped, equity reset, PnL lost) |
 | Interface contracts | Cross-component wiring | 6 (wrong attribute names, missing propagation) |
@@ -113,7 +117,7 @@ The most ambitious multi-agent operation was a 15-agent deep audit that found **
 | Configuration | Default values | 3 (network calls in default_factory) |
 | Others | Various | 1 remaining |
 
-**12 PRs were merged in a single session** (#736-#747), each fixing a category of bugs. This audit also produced rules 44-53.
+**12 PRs were merged in a single session**, each fixing a category of bugs. This audit also produced rules 44-53.
 
 ---
 
@@ -127,8 +131,9 @@ The current model is **continuous parallel sessions**:
 2. **Implementation sessions**: Wire accepted findings into production code
 3. **Audit sessions**: Deep-scan for bugs, dead code, interface mismatches
 4. **Infrastructure sessions**: Data pipeline expansion, daemon management, deployment
+5. **Production sessions**: Live system monitoring, incident response, recalibration
 
-Each session type has different agent configurations, verification requirements, and merge protocols. Research sessions are exploratory (more tolerance for throwaway code). Implementation sessions are strict (full verification, interface contract tests). Audit sessions are adversarial (explicitly trying to break things).
+Each session type has different agent configurations, verification requirements, and merge protocols. Research sessions are exploratory (more tolerance for throwaway code). Implementation sessions are strict (full verification, interface contract tests). Audit sessions are adversarial (explicitly trying to break things). Production sessions are safety-critical (deployment checklists, rollback plans).
 
 ---
 
@@ -137,19 +142,20 @@ Each session type has different agent configurations, verification requirements,
 ### What Works
 
 1. **Git worktree isolation eliminates most file conflicts.** The conflict preflight catches the rest.
-2. **Rules that encode failure modes prevent repeat incidents.** The 53-rule contract is proof.
+2. **Rules that encode failure modes prevent repeat incidents.** The 62-rule contract is proof.
 3. **Interface contract tests catch the #1 bug category.** Silent integration failures from attribute name mismatches.
 4. **Adversarial audit sessions find what normal development misses.** 53 bugs in one session.
 5. **Canonical fee model prevents inconsistency.** Three different fee rates was the anti-pattern.
+6. **Session-typed development prevents mode mixing.** Research sessions vs. implementation sessions have different quality bars.
 
 ### What Failed and Was Fixed
 
 1. **Sprint model doesn't scale past initial build.** Replaced with continuous parallel sessions.
 2. **"13 agents in one sprint" created coordination overhead.** Smaller, focused sessions are more effective.
 3. **Silent exception handling hid critical bugs for weeks.** Now banned via Rule 45.
-4. **Dead code accumulated without active cleanup.** Now audited per PR via Rule 50.
+4. **Dead code accumulated without active cleanup.** Now audited per PR via Rule 50. A single archival PR removed 36,658 LOC.
 5. **Aggregate signals masked per-asset opportunities.** Per-asset decomposition is now Rule 39.
-6. **Dead code accumulates without active pruning.** A single archival PR (#774) removed 36,658 LOC of dead modules, stale allocators, and superseded orchestrators. Test count dropped from 4,542 to 3,610 — every removed test was testing dead code. This is healthy: it means the codebase got leaner, not that coverage regressed.
+6. **Live deployment revealed new failure categories.** State reconciliation, data plane verification, and margin accounting bugs only appeared under real trading conditions — prompting rules 54-62.
 
 ### Key Insight
 

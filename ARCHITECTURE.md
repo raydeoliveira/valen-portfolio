@@ -2,7 +2,7 @@
 
 ## Design Philosophy
 
-VALEN follows **Clean Architecture** (Ports & Adapters), refined across seven prior system versions (EISEN S1-S7) and six months of continuous development on Hyperliquid. The core principle: domain logic never depends on infrastructure. Exchange SDKs, databases, and CLI frameworks are implementation details behind abstract interfaces.
+VALEN follows **Clean Architecture** (Ports & Adapters), refined across seven prior system versions (EISEN S1-S7) and continuous development on Hyperliquid. The core principle: domain logic never depends on infrastructure. Exchange SDKs, databases, and CLI frameworks are implementation details behind abstract interfaces.
 
 This is a safety requirement, not architectural purism. The backtest engine and the live adapter implement identical port contracts. If a strategy produces different behavior in backtest vs. live, that is a bug — not "market impact" or "execution slippage."
 
@@ -32,8 +32,8 @@ VALEN separates trading logic into three layers with strict invariants that prev
 │  Layer 2: EXECUTION OPTIMIZATION                                     │
 │  ┌────────────────────────────────────────────────────────────────┐ │
 │  │ SmartOrderRouter with 6 microstructure gates                   │ │
-│  │ VPIN (0.25) · Kyle's Lambda (0.20) · Vol regime (0.20)        │ │
-│  │ TFI (0.15) · Cascade suppression (0.15) · RSI (0.05)         │ │
+│  │ VPIN · Kyle's Lambda · Vol regime                              │ │
+│  │ TFI · Cascade suppression · RSI                                │ │
 │  │ Composite score → ALO maker (1.5 bps) or MARKET taker (4.5)  │ │
 │  └────────────────────────────────────────────────────────────────┘ │
 │       │  Invariant: L2 NEVER overrides L1 direction                 │
@@ -46,6 +46,7 @@ VALEN separates trading logic into three layers with strict invariants that prev
 │  │ MomentumSizer: trend-alignment boost (BTC, HYPE, RENDER)      │ │
 │  │ SmartMoneySizing: contrarian vault-flow modulation             │ │
 │  │ VaultConsensusOverlay: smart money conviction filter           │ │
+│  │ A1 Manager: asymmetric stops, breakeven, CEM gradual exit     │ │
 │  │ Hierarchical stacking: MAX(boosts), MIN(reductions)           │ │
 │  └────────────────────────────────────────────────────────────────┘ │
 │       │  Invariant: L3 scales size but NEVER flips direction        │
@@ -141,8 +142,8 @@ Signal from L1
 │  VPIN ─────────────── 0.25 ──┐       │
 │  Kyle's Lambda ─────  0.20 ──┤       │
 │  Vol regime ─────────  0.20 ──┤       │
-│  TFI ───────────────  0.15 ──┼──▶ Composite  ──▶  < 0.50: ALO (maker)
-│  Cascade suppression  0.15 ──┤       score          ≥ 0.50: MARKET (taker)
+│  TFI ───────────────  0.15 ──┼──▶ Composite  ──▶  < threshold: ALO (maker)
+│  Cascade suppression  0.15 ──┤       score          ≥ threshold: MARKET (taker)
 │  RSI suppression ──── 0.05 ──┘                      URGENT: bypass → MARKET
 └──────────────────────────────────────┘
 ```
@@ -173,6 +174,30 @@ This is a deliberate design choice. Four small boosts at +15% each would compoun
 
 ---
 
+## A1 Asymmetric Trade Management
+
+Each position has an independent lifecycle manager that handles stops, trails, and exits with per-asset ATR-scaled parameters:
+
+```
+Position Open
+    │
+    ├── ATR trailing stop (regime-aware width)
+    │   └── Tightens in trending regimes, widens in choppy/sideways
+    │
+    ├── Breakeven trigger
+    │   └── Moves stop to entry after configurable profit threshold
+    │
+    ├── Time stop
+    │   └── Per-asset maximum hold duration to prevent capital lock-up
+    │
+    └── CEM gradual exit (Conviction Erosion Model)
+        └── Smooth position reduction as edge erodes, vs. binary stop-out
+```
+
+**Why per-asset**: ATR-scaled stops mean HYPE (high vol) gets wider stops than PAXG (low vol). A fixed 1.5% stop for all assets was tested and rejected — it stopped out high-vol assets prematurely and let low-vol losses run too long.
+
+---
+
 ## Short Basket Architecture
 
 ### Euphoria-Fade Entry Scoring
@@ -188,16 +213,16 @@ The 229-coin Hyperliquid universe is rescored weekly:
 3. **24h volume** — liquidity filter (minimum threshold for executable size)
 4. **Realized volatility** — position sizing input (inverse-vol weighting)
 5. **BTC correlation** — higher correlation = better hedge effectiveness
-6. **Coinalyze L/S ratio** — crowd positioning (contrarian boost when L/S > 70%)
+6. **L/S ratio** — crowd positioning (contrarian boost when longs dominate)
 
-Output: 25-coin basket, inverse-volatility weighted.
+Output: 30-coin basket, inverse-volatility weighted.
 
 ### 3-Tier Loss Management
 
 | Tier | Scope | Mechanism | Frequency |
 |------|-------|-----------|-----------|
 | T1 | Per-coin | 6-factor score modulates weight continuously | Every evaluation bar |
-| T2 | Basket | Rescore universe, replace weakest 10 positions | Weekly |
+| T2 | Basket | Rescore universe, replace weakest positions | Weekly |
 | T3 | Per-coin | ATR-scaled emergency hard stop | Continuous |
 
 VRULE-019 proved that no single tier suffices. Every rotation strategy tested was liquidated in the 2024-2025 bull market when tested full-cycle. The 3-tier approach provides defense in depth where each tier catches what the others miss.
@@ -240,26 +265,27 @@ config/
 ├── sleeve_hype.json
 ├── sleeve_oil.json
 ├── sleeve_c_short_basket.json    # Short basket: scoring weights, rotation schedule
+├── signal_calibration.json       # Per-asset signal calibration parameters
 ├── fee_model.json                # Canonical fees (taker 4.5 bps, maker 1.5 bps)
-└── ...
+└── ...                           # 109 config files total
 ```
 
-**No hardcoded parameters in strategy code.** Every threshold, EMA period, leverage limit, and fee rate comes from configuration. This is enforced by code review, not convention.
+**No hardcoded parameters in strategy code.** Every threshold, EMA period, leverage limit, and fee rate comes from configuration. This is enforced by code review and CI, not convention.
 
 ---
 
 ## Testing Architecture
 
-Tests organized by architectural layer, with 3,610 tests across 256 files:
+Tests organized by architectural layer, with 4,376 tests across 323 files:
 
-| Layer | Test Type | Count | Example |
-|-------|-----------|-------|---------|
-| Domain | Unit | ~200 | Model validation, enum behavior, Decimal precision |
-| Ports | Contract | ~50 | Port ABCs define expected methods |
-| Services | Unit + integration | ~2,500 | Signal generation, SOR routing, sizing math |
-| Backtesting | Property + integration | ~800 | Fee model accuracy, equity monotonicity under zero-fee |
-| Infrastructure | Integration | ~500 | Adapter behavior, DB access, rate limiting |
-| Interface contracts | Boundary | ~200 | Attribute name verification between components |
-| System | End-to-end | ~100 | Full backtest with all sleeves active |
+| Layer | Test Type | Example |
+|-------|-----------|---------|
+| Domain | Unit | Model validation, enum behavior, Decimal precision |
+| Ports | Contract | Port ABCs define expected methods |
+| Services | Unit + integration | Signal generation, SOR routing, sizing math |
+| Backtesting | Property + integration | Fee model accuracy, equity monotonicity under zero-fee |
+| Infrastructure | Integration | Adapter behavior, DB access, rate limiting |
+| Interface contracts | Boundary | Attribute name verification between components |
+| System | End-to-end | Full backtest with all sleeves active |
 
 Key principle: **Interface contract tests verify attribute names match between producer and consumer.** This prevents the silent integration failures (wrong attribute names, caught by bare `except`) that were the #1 bug category discovered during a 15-agent deep audit.
