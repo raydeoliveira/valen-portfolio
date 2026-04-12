@@ -10,405 +10,185 @@
 
 # VALEN — Multi-Asset Algorithmic Trading System
 
-**A 3-layer, 11-sleeve algorithmic trading system for Hyperliquid DEX perpetual futures. Live on mainnet trading real capital. Built with Clean Architecture, rigorous quantitative research (900+ backtests, 81 hypotheses), and AI-augmented development at scale (900+ PRs, 4,300+ tests).**
+**Live on Hyperliquid mainnet since April 4, 2026.** 3-layer architecture, 11 independent sleeves, 4,376 tests. Designed and built in ~4 weeks by a solo product/engineering leader operating a fleet of AI agents, leveraging architecture patterns refined across 7 prior system versions.
 
-> **Live on Hyperliquid mainnet since April 2026.** Deployed on AWS (Tokyo region) with systemd orchestration, automated recalibration, and 24/7 monitoring. This is not a backtest — it is a production system managing real positions across 11 independent sleeves.
-
-> This is a portfolio showcase. The full codebase lives in a private repository.
+> This is a portfolio showcase. The full codebase (905+ PRs, ~150K LOC) lives in a private repository.
 
 ---
 
-### What This Demonstrates
+## About the Builder
 
-- **Production systems engineering**: Live on mainnet with real capital — not a paper-trading demo or backtest artifact
-- **Systems architecture**: 3-layer separation with strict invariants, Clean Architecture with CI-enforced import boundaries
-- **Quantitative rigor**: 900+ backtests, 81 hypotheses with formal kill criteria, 21 documented dead-ends (VRULEs)
-- **Risk engineering**: Asymmetric short-book risk bounded by 3-tier defense-in-depth; hierarchical sizing prevents leverage compounding
-- **Data engineering**: 28 collection daemons, 208M+ row archive, 18 SQLite databases with 3-tier isolation (cold/warm/hot)
-- **Process engineering**: 62-rule agent contract evolved from production incidents, each rule traceable to a specific bug
-- **Execution optimization**: Microstructure-aware order routing (6 gates, maker/taker decision) saving measurable basis points
-- **Intellectual honesty**: Strategies that were tested and rejected are documented with equal rigor to those that survived
-- **Solo builder leverage**: One engineer + AI agents producing output equivalent to a small team (900+ PRs in continuous development)
+I'm a product and engineering leader with 10+ years of experience building and exiting startups. My career has been 0-to-1 and 1-to-10: defining products, hiring teams, shipping systems, and finding market fit.
+
+VALEN represents a new model: **the full-stack founder who architects complex systems and operates AI agent fleets as force multipliers.** I didn't write 150K lines of Python by hand. I designed the architecture, defined the 62-rule agent contract that encodes my engineering judgment, directed research campaigns across 81 hypotheses, and operated the AI agents that implemented it. The system reflects my decisions — what to build, what to kill, how components interact, and when to ship.
+
+The relevant skill is not "can write Python." It's: can I take a complex domain (quantitative trading on a novel DEX), architect a production system, operate AI at scale to build it, and ship it live with real capital in weeks instead of quarters?
 
 ---
 
 ## System at a Glance
 
-| Dimension | Detail |
-|-----------|--------|
-| Status | **Live on Hyperliquid mainnet** (AWS Tokyo, systemd) |
-| Version | **VALEN S4** — 3-layer, 11-sleeve architecture |
-| Tests | **4,376** across 323 test files |
-| PRs merged | **905+** across continuous parallel development |
-| Active source | **~150K LOC** (src + tests) |
-| Research rigor | **81 hypotheses** tested, **21 dead-end verdicts** (VRULEs), **900+ backtests** |
-| Data infrastructure | 28 collection daemons, 208M+ rows, 18 SQLite databases |
-| Agent contract | **62 rules** — evolved from 10, each traceable to a specific incident |
-| Optimization | Sortino(gamma=2) primary — Sharpe is structurally wrong for crypto |
-| AI development | Multi-agent parallel development with git worktree isolation |
+| | |
+|---|---|
+| **Status** | Live on Hyperliquid mainnet, AWS Tokyo |
+| **Version** | S4 — designed and built in ~4 weeks (March-April 2026) |
+| **Architecture** | 3-layer (Signal → Execution → Sizing), 11 sleeves, Clean Architecture |
+| **Scale** | 4,376 tests, 905+ PRs, ~150K LOC, 109 config files |
+| **Research** | 81 hypotheses tested, 21 dead-ends documented, 900+ backtests |
+| **Data** | 28 daemons, 208M+ rows, 18 databases, 3-tier isolation |
+| **Operations** | Automated daily/weekly recalibration, 5-min health checks |
+| **AI process** | 62-rule agent contract, git worktree isolation, conflict preflight |
 
----
-
-## Why This System Exists
-
-Most algorithmic trading systems are either (a) simple momentum/mean-reversion strategies that work in backtests but fail live, or (b) black-box ML systems that overfit to historical patterns.
-
-VALEN takes a different approach: **hypothesis-driven architecture where every component has survived rigorous elimination testing.** The system is defined as much by what was tested and rejected (21 VRULEs) as by what survived. Funding arbitrage, sub-hourly directional trading, dynamic leverage allocation, strategy-mode switching — all tested with statistical rigor, all rejected with documented evidence.
-
-What remains is a system built on components that have been adversarially challenged across multiple market regimes, fee models, and asset classes — and then deployed to trade real capital.
+**[Live performance data →](PERFORMANCE.md)** | **[System evolution S1-S4 →](EVOLUTION.md)**
 
 ---
 
 ## Architecture
-
-### 3-Layer Design
-
-The system separates concerns into three layers with strict invariants:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  Layer 1: SIGNAL                                                │
 │  Per-sleeve dual-EMA crossover + regime gate                    │
 │  Direction decisions at 4h+ cadence only                        │
-│  11 independent sleeve configurations                           │
-│  Key invariant: Sub-hourly direction changes are BANNED          │
-│  (0% pass rate across 800+ tests — fee drag exceeds alpha)      │
+│  Invariant: Sub-hourly direction changes BANNED (0% pass rate)  │
 ├─────────────────────────────────────────────────────────────────┤
 │  Layer 2: EXECUTION                                              │
-│  SmartOrderRouter with 6 microstructure gates                    │
-│  VPIN (toxicity) · Kyle's Lambda (impact) · Vol regime           │
-│  TFI (adverse selection) · Cascade suppression · RSI             │
-│  Routes: ALO maker (1.5 bps) vs MARKET taker (4.5 bps)         │
-│  Key invariant: L2 NEVER overrides L1 direction                 │
+│  SmartOrderRouter: 6 microstructure gates (VPIN, Kyle's Lambda, │
+│  vol regime, TFI, cascade suppression, RSI)                     │
+│  Routes: ALO maker 1.5bps vs MARKET taker 4.5bps               │
+│  Invariant: L2 NEVER overrides L1 direction                     │
 ├─────────────────────────────────────────────────────────────────┤
 │  Layer 3: EVENT / SIZING                                        │
-│  UnifiedEventEngine + TailRiskOverlay + MomentumSizer           │
-│  SmartMoneySizing + VaultConsensusOverlay                        │
-│  A1 asymmetric trade management (ATR stops, breakeven, CEM)     │
+│  5 overlays + A1 trade management (ATR stops, breakeven, CEM)   │
 │  Hierarchical stacking: MAX(boosts), MIN(reductions)            │
-│  Key invariant: L3 scales size but NEVER flips direction        │
+│  Invariant: L3 scales size but NEVER flips direction            │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 11-Sleeve Portfolio
+### Portfolio
 
-**Long Book** (10 sleeves):
+| | Sleeves | Composition |
+|---|---|---|
+| **Long Book** | 10 | BTC, HYPE, SKY, Oil (xyz:CL), AZTEC, PAXG, RENDER, NVDA (km:), RTX (km:), PLTR (km:) |
+| **Hedge Book** | 1 | 30-coin inverse-vol-weighted short basket, euphoria-fade scoring, 3-tier loss management |
 
-| Sleeve | Asset | Signal Mode | Why Included |
-|--------|-------|------------|--------------|
-| BTC | BTC | Dual-EMA + regime gate | Core crypto exposure, deepest liquidity |
-| HYPE | HYPE | Dual-EMA + regime gate | Hyperliquid native token, exchange-aligned |
-| SKY | SKY | Dual-EMA | DeFi governance revenue (MakerDAO successor) |
-| Oil | xyz:CL | Independent regime | Crypto-decorrelated (corr -0.177 to BTC) |
-| AZTEC | AZTEC | Dual-EMA | Privacy infrastructure, high-conviction thesis |
-| PAXG | PAXG | Always-long | Gold-backed safe haven, negative funding = income |
-| RENDER | RENDER | Dual-EMA | GPU compute demand proxy |
-| NVDA | km:NVDA | Dual-EMA | TradFi AI exposure via institutional builder perps |
-| RTX | km:RTX | Dual-EMA | TradFi defense sector, macro-resilient |
-| PLTR | km:PLTR | Dual-EMA | TradFi defense/AI convergence, negative funding |
+`km:` = builder perps (institutionally licensed TradFi instruments on Hyperliquid). `xyz:` = commodity perps.
 
-**Hedge Book** (1 sleeve): 30-coin inverse-volatility-weighted short basket with euphoria-fade scoring and 3-tier loss management (per-coin factor modulation → weekly basket rotation → ATR hard stops).
+### Clean Architecture
 
-Note: `km:` prefix denotes Trade.KM builder perps — institutionally licensed TradFi instruments available on Hyperliquid with higher leverage ceilings and distinct margin pools.
+Domain models (Pydantic v2, `Decimal` for money) → Ports (4 abstract interfaces) → Services → Adapters (Hyperliquid SDK, paper trading, backtest engine). Import boundaries enforced by CI. Backtest and live adapters implement identical port contracts.
 
-### Clean Architecture (Ports & Adapters)
+---
 
-```
-Domain Models (Pydantic v2)     ← Zero exchange dependencies
-    ▲
-Ports (Abstract contracts)      ← ExecutionPort, MarketDataPort, FundingPort, RiskPort
-    ▲
-Services Layer                  ← Signal engines, SOR, sizing overlays, governor
-    ▲
-Adapters                        ← Hyperliquid SDK, paper trading, backtest engine
-```
+## What Was Tested and Killed
 
-The backtest engine and the live trading adapter implement identical port contracts. A strategy that produces different behavior in backtest vs. live is a strategy with a bug, not a strategy with "market impact."
+The system is defined as much by its 21 documented rejections as by what survived:
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the complete design, or browse the [source code samples](src/) included in this repository.
+| Verdict | Finding |
+|---------|---------|
+| VRULE-001 | Dynamic leverage per regime: dead |
+| VRULE-012 | Strategy-mode engines lose to dual-EMA |
+| VRULE-013 | Cross-exchange derivatives: zero alpha (331K hourly obs) |
+| VRULE-019 | Naked shorts liquidated in bull markets |
+| VRULE-020 | Funding drag per-asset, not uniform (original model 16x wrong) |
+| VRULE-021 | Mean reversion during sideways loses to holding |
 
-### Code Samples (Public)
+**Strongest meta-finding:** Per-asset signal decomposition improved Portfolio Sortino by +123% vs aggregate signals. Every threshold, stop width, and modulation frequency is now asset-specific.
 
-This repository includes selected source code demonstrating engineering quality:
+All 81 hypotheses follow: Hypothesis → Test Plan → Kill Criteria → Factorial Campaign → Temporal Red-Team → Verdict. Details in [METHODOLOGY.md](METHODOLOGY.md).
 
-| Path | What It Shows |
-|------|--------------|
-| [`src/domain/models.py`](src/domain/models.py) | Pydantic v2 domain models — `Decimal` for all financial values, frozen immutability, clean serialization |
-| [`src/ports/`](src/ports/) | 4 abstract port interfaces — the complete boundary between logic and infrastructure |
+---
+
+## Code Samples
+
+These are production files from the private repository. Signal parameters and scoring formulas are not included.
+
+| File | What It Demonstrates |
+|------|---------------------|
+| [`src/services/execution/vpin_calculator.py`](src/services/execution/vpin_calculator.py) | VPIN toxicity estimation (Easley et al. 2012) — volume bucketing, BVC classification, streaming + batch interfaces, per-asset calibration |
+| [`src/domain/models.py`](src/domain/models.py) | Pydantic v2 domain models — `Decimal` financials, frozen immutability, exchange-agnostic design |
+| [`src/ports/`](src/ports/) | 4 port interfaces — the complete boundary between domain logic and infrastructure |
 | [`src/backtesting/fee_model.py`](src/backtesting/fee_model.py) | Canonical fee model — single source of truth, self-validating, zero-fee leverage awareness |
-
-These are production files from the private repository. Signal parameters, allocation weights, and scoring formulas are not included.
-
----
-
-## Research Methodology
-
-### Evidence-Driven Elimination
-
-The system's credibility comes from what it has rigorously killed, not just what it runs:
-
-| Dead-End Verdict | Finding | Evidence |
-|------------------|---------|----------|
-| VRULE-001 | Dynamic leverage per regime is dead | Multi-asset, multi-window testing |
-| VRULE-012 | Strategy-mode engines lose to dual-EMA | Factorial comparison across all sleeves |
-| VRULE-013 | Cross-exchange derivatives data: zero alpha for BTC | Coinalyze OI/funding, 331K hourly obs |
-| VRULE-019 | Naked shorts LIQUIDATED in bull markets | Full-cycle backtest incl. 2024-25 bull |
-| VRULE-020 | Funding drag is per-asset, not uniform | Original 0.01%/8h was 16x overstated for BTC |
-| VRULE-021 | Mean reversion during sideways loses to holding | Regime-switching fails at transitions |
-
-### The Strongest Meta-Finding
-
-**Per-asset signal decomposition improved Portfolio Sortino by +123%.** Every signal, threshold, modulation frequency, and stop width performs better when calibrated per-asset rather than using aggregate portfolio-level values. This finding — discovered through systematic factorial testing across 6 accepted component improvements — changed the entire system design philosophy.
-
-### Hypothesis-Driven Development
-
-Every proposed change follows a formal lifecycle: Hypothesis → Test Plan → Kill Criteria → Factorial Campaign → Temporal Red-Team → Verdict. All 81 hypotheses are tracked in a central registry with unique IDs, parent hypotheses, test results, and verdict rationale.
-
-See [METHODOLOGY.md](METHODOLOGY.md) for the full research framework.
+| [`tests/test_integration_contracts.py`](tests/test_integration_contracts.py) | Interface contract tests — the fix for the #1 bug category (silent attribute name mismatches) |
+| [`scripts/conflict_preflight.sh`](scripts/conflict_preflight.sh) | Multi-agent coordination — PR conflict detection, exclusive zone enforcement, worktree management |
 
 ---
 
-## Execution Layer
+## AI Fleet Operation
 
-### SmartOrderRouter
+I built the harness, not just the system. VALEN's development infrastructure is a product in itself:
 
-The SOR evaluates 6 microstructure gates and computes a weighted composite score to decide between maker (ALO, ~1.5 bps) and taker (MARKET, ~4.5 bps) routing:
+- **62-rule agent contract** — started at 10, grew through production incidents. Each rule traces to a specific bug. This is encoded institutional knowledge, not a style guide.
+- **Git worktree isolation** — each agent works in its own worktree. No file conflicts, clean merge paths, failure isolation.
+- **Conflict preflight** — agents check for exclusive zone contention before starting work. Exit code 2 = stop.
+- **Merge orchestrator** — computes safe PR merge order based on file dependency analysis.
+- **Verification gate** — lint + type check + 4,376 tests + architecture conformance before every merge.
 
-| Gate | Weight | What It Detects |
-|------|--------|----------------|
-| VPIN (Volume-Synchronized PIN) | 0.25 | Informed flow / toxicity |
-| Kyle's Lambda | 0.20 | Expected price impact |
-| Volatility regime | 0.20 | Regime-appropriate urgency |
-| Trade Flow Imbalance | 0.15 | Adverse selection risk |
-| Cascade suppression | 0.15 | Liquidation cascade detection |
-| RSI suppression | 0.05 | Short-term overbought/oversold |
+The 62 rules evolved in phases: foundation (1-10), research discipline (11-28), research failure prevention (29-38), deep audit findings (44-53), and live deployment (54-62). Each phase was triggered by a class of failure that the previous rules didn't prevent.
 
-### Hierarchical Sizing (Option C)
+A 15-agent parallel audit found 53 bugs in a single session — interface mismatches, silent exceptions, state persistence failures, dead code. That session produced rules 44-53 and 12 fix PRs.
 
-Position sizing overlays stack via a hierarchical rule that prevents dangerous leverage compounding:
-
-- **Boosts**: Take MAX of all confirmation boosts (not sum)
-- **Reductions**: Take MIN of all reduction factors (most cautious wins)
-
-Five independent sizing signals overlap: momentum alignment, smart money positioning, calendar event gates, vault consensus, and tail risk drawdown scaling. The hierarchical rule ensures they never compound into excessive leverage.
-
-### A1 Asymmetric Trade Management
-
-Per-asset trade lifecycle management with ATR-scaled parameters:
-
-- **Trailing stops**: Regime-aware trail widths that tighten in trending markets and widen in choppy regimes
-- **Time stops**: Per-asset time-based position limits to prevent capital lock-up in dead trades
-- **Breakeven triggers**: Automatic stop-to-entry after configurable profit thresholds
-- **CEM gradual exits**: Conviction-erosion model for smooth position reduction vs. binary stop-outs
-
----
-
-## Risk Engineering
-
-### Short Basket: 3-Tier Loss Management
-
-Short positions face asymmetric risk (unlimited upside exposure). VALEN bounds short-book losses through three independent tiers:
-
-| Tier | Mechanism | Frequency |
-|------|-----------|-----------|
-| T1: Per-coin factor modulation | 6-factor score adjusts weight continuously | Every bar |
-| T2: Weekly basket rotation | Rescore 229-coin universe, replace weakest positions | Weekly |
-| T3: ATR hard stops | Emergency per-position stop-loss | Continuous |
-
-**Key insight**: No single tier is sufficient. VRULE-019 showed that even sophisticated rotation strategies get liquidated in sustained bull markets. The 3-tier approach provides defense in depth.
-
-### Euphoria-Fade Short Entry
-
-The short basket uses inverted scoring: high momentum, ATH proximity, elevated social sentiment, and funding spikes are all *bullish crowd indicators* that predict reversals. This produces better short timing than momentum-following because shorts profit from reversals, not continuations.
-
-### Portfolio Exposure Governor
-
-Real-time portfolio-level risk management:
-- Cross-asset correlation monitoring (high correlation = reduce exposure)
-- Drawdown-reactive position scaling with finer-grained tiers (2%/3% DD thresholds)
-- Hyperliquid leverage limit enforcement (live API, 15-min refresh)
-- Per-sleeve exposure caps with regime modulation
+See [AI_DEVELOPMENT.md](AI_DEVELOPMENT.md) for the full breakdown.
 
 ---
 
 ## Production Operations
 
-### Deployment Architecture
-
 ```
-┌──────────────────────────────────────────────────┐
-│  AWS EC2 (Tokyo, ap-northeast-1)                  │
-│  Low-latency proximity to Hyperliquid validators  │
-├──────────────────────────────────────────────────┤
-│  systemd services:                                │
-│    valen.service         — Main orchestrator      │
-│    valen-smart-money     — Vault flow collector   │
-├──────────────────────────────────────────────────┤
-│  systemd timers:                                  │
-│    Daily 04:00 UTC  — Short basket rescore        │
-│    Daily 05:00 UTC  — Signal recalibration        │
-│    Weekly Mon 06:00 — Factor model recalibration  │
-├──────────────────────────────────────────────────┤
-│  28 data collection daemons                       │
-│  Candles · L2 book · Funding · OI · Vault flows   │
-│  Governance · Sentiment · Archive maintenance     │
-└──────────────────────────────────────────────────┘
+AWS EC2 Tokyo → systemd services (orchestrator + vault flow collector)
+             → systemd timers (daily short rescore, daily signal recal, weekly factor recal)
+             → 28 data collection daemons (candles, L2, funding, OI, sentiment, vaults)
+             → 208M+ rows across 18 SQLite databases (cold/warm/hot tier isolation)
 ```
 
-### Automated Recalibration Chain
-
-The system self-tunes without manual intervention:
-
-1. **Daily short rescore**: Re-rank 229-coin universe using 6-factor model, rotate weakest positions
-2. **Daily signal recalibration**: Update per-asset signal parameters based on recent regime data
-3. **Weekly factor recalibration**: Full factor model update with expanded lookback windows
-
-Each recalibration step logs its inputs, outputs, and parameter deltas for auditability.
+Health checks every 5 minutes. Economics gate blocks trades where edge-to-cost ratio < 1.3x. Currently running at 0.69x gross leverage — the system prefers sitting flat to paying fees on marginal signals. [Live data →](PERFORMANCE.md)
 
 ---
 
-## Infrastructure
+## Lessons for Engineering Teams
 
-### Data Pipeline (28 Daemons)
+1. **Interface contract tests prevent the #1 integration bug.** Verify attribute names match between producer and consumer. `pct_change` vs `change_pct` made an entire subsystem a no-op.
+2. **`except Exception: pass` is a time bomb.** Four critical bugs were hidden for weeks by bare exception handlers. Ban them.
+3. **Independently-validated improvements don't compose.** Six accepted findings combined produced WORSE results than baseline. Pairwise interaction testing is mandatory.
+4. **Canonical models beat per-script constants.** Three different fee rates in three scripts, all wrong. Single source of truth, imported everywhere.
+5. **Active deletion is a feature.** 36,658 LOC of dead code archived in a single PR. Without active pruning, dead code grows faster than live code.
 
-| Category | Daemons | Data |
-|----------|---------|------|
-| Candle collection | 6 | 4h, 1h, 15m candles for 229+ coins |
-| L2 order book | 2 | Bid/ask snapshots for microstructure gates |
-| Funding rates | 2 | Per-asset funding (positive AND negative) |
-| Open interest | 2 | OI snapshots for cascade detection |
-| Vault flows | 3 | Smart money deposit/withdrawal tracking |
-| Governance/revenue | 2 | SKY protocol revenue, governance events |
-| Social/sentiment | 3 | Galaxy scores, LunarCrush social data |
-| Archive maintenance | 4 | WAL checkpoints, integrity validation |
-| Misc | 4 | Token unlocks, liquidation feeds, health monitors |
+## Lessons for AI-Enabled Product Teams
 
-**208M+ rows** in the primary archive (38 GB SQLite, WAL mode). 18 total databases with strict tier separation: cold (archive, backtesting only) / warm (daemon DBs, production signals) / hot (live API, execution).
-
-### Fee Model
-
-All backtests use a canonical fee model reflecting VIP-0 tiers: 4.5 bps taker, 1.5 bps maker. The model correctly handles:
-- Zero-fee leverage changes via `update_leverage` / `updateIsolatedMargin`
-- Per-asset funding rates (BTC ~0.0006%/8h positive; PAXG ~-0.0016%/8h negative = income)
-- ALO maker-only routing from the SmartOrderRouter
+1. **The harness is the product.** The 62-rule agent contract, conflict preflight, and merge orchestrator are more valuable than any individual PR. They encode judgment that applies to every future session.
+2. **Rules should grow from incidents, not imagination.** Every rule traces to a specific failure. Speculative rules get ignored; incident-driven rules get respected.
+3. **Session typing prevents mode-mixing.** Research sessions (exploratory, throwaway code OK) vs implementation sessions (full verification, contract tests) vs audit sessions (adversarial, trying to break things). Different quality bars for different work.
+4. **AI agents need boundaries, not babysitting.** Worktree isolation, conflict preflight, and verification gates let agents work autonomously. The constraint system replaces micromanagement.
+5. **Encode what you learned, not what you did.** The hypothesis registry and VRULE system prevent re-investigating dead ends. The cost of a well-documented rejection is negative — it saves future time.
 
 ---
 
-## AI-Augmented Development
+## Timeline (Honest)
 
-### Scale
+| Date | Milestone |
+|------|-----------|
+| Pre-March 2026 | EISEN S1-S7 on Coinbase (predecessor system, 7 architecture versions) |
+| Early March | VALEN S1: Clean Architecture foundation, BTC-only, ports & adapters |
+| Mid March | S2: 11-sleeve expansion, short basket, SmartOrderRouter, 28 data daemons |
+| Late March | S3: Research hardening, 81 hypotheses, 21 VRULEs, 15-agent deep audit |
+| April 4 | **S4: Live on Hyperliquid mainnet** with real capital |
+| April 6-10 | EC2 Tokyo migration, 5-day system rebuild, 30+ live bug fixes |
+| April 11+ | Stable production operation, automated recalibration |
 
-| Metric | Value |
-|--------|-------|
-| PRs merged | **905+** |
-| Tests | **4,376** across 323 files |
-| Active LOC | **~150K** (src + tests) |
-| Agent contract rules | **62** (evolved from 10 initial rules) |
-| Research verdicts (VRULEs) | **21** |
-| Hypotheses tested | **81** |
-| Config files | **109** |
-
-### Multi-Agent Coordination
-
-Development uses parallel AI agents with:
-- **Git worktree isolation**: Each agent works in its own worktree — file-level isolation, clean merge paths
-- **Conflict preflight**: Mandatory check before picking up work — overlapping file modifications block the agent
-- **Merge orchestrator**: Computes safe PR merge ordering based on file dependency analysis
-- **62-rule agent contract**: Evolved through production incidents (rules 54-62 added after live deployment)
-- **Verification gate**: Lint + type check + tests + architecture conformance before every merge
-
-### How Rules Evolved
-
-The agent contract started with 10 basic rules. Each production incident or research failure added specific rules to prevent recurrence:
-
-- **Rules 1-10** (Foundation): Basic hygiene — verification gates, logging, no live trading without approval
-- **Rules 29-38** (Research failures): Prevent claiming system-level results from component tests, premature dead-end verdicts, missing factorial interaction testing
-- **Rules 44-53** (Deep audit): Added after a 15-agent parallel audit found 53 bugs — interface mismatches, silent exception swallowing, state persistence failures
-- **Rules 54-62** (Live deployment): Deployment verification, incident review protocols, data plane verification rules added after going live on mainnet
-
-See [AI_DEVELOPMENT.md](AI_DEVELOPMENT.md) for the full deep dive.
+S1 through S4 happened in approximately 4 weeks. This speed was possible because (a) EISEN provided 7 versions of architectural refinement to draw from, (b) AI agents handled implementation at ~20-30 PRs/day during peak sessions, and (c) the hypothesis-driven methodology killed bad ideas fast instead of letting them accumulate.
 
 ---
 
-## Engineering Standards
+## Related
 
-- **Clean Architecture**: Domain models have zero exchange dependencies. Import boundaries enforced by CI.
-- **Pydantic v2**: All domain models validated, serializable. `Decimal` for all financial values.
-- **Type safety**: Full type hints, mypy strict mode.
-- **Canonical fee model**: Single source of truth for fees. Hardcoded rates in ad-hoc scripts are banned.
-- **Interface contract tests**: Every component boundary has explicit attribute verification tests.
-- **No silent exception swallowing**: `except Exception: pass` is banned. Every handler logs or re-raises.
-- **State persistence round-trip tests**: Every `save_state()` field verified in `load_state()`.
-- **Dead code audit per PR**: Every new method must be called from production code.
-- **Quantitative claims require numbers**: "Significant improvement" is banned. "+0.555 Sortino delta (1.09 → 1.645)" is required.
-
-See [ENGINEERING_STANDARDS.md](ENGINEERING_STANDARDS.md) for the full standards document.
+- **[EISEN](https://github.com/raydeoliveira/eisen-portfolio)** — predecessor system for Coinbase. 7 versions, 4 strategy eliminations.
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** — full architecture deep-dive
+- **[PERFORMANCE.md](PERFORMANCE.md)** — live trading data with charts
+- **[EVOLUTION.md](EVOLUTION.md)** — S1 → S4 version narrative
+- **[METHODOLOGY.md](METHODOLOGY.md)** — research framework (factorial campaigns, temporal red-teaming)
+- **[ENGINEERING_STANDARDS.md](ENGINEERING_STANDARDS.md)** — coding standards, each with the bug that motivated it
+- **[AI_DEVELOPMENT.md](AI_DEVELOPMENT.md)** — multi-agent coordination infrastructure
 
 ---
 
-## Tech Stack
-
-| Layer | Technology |
-|-------|------------|
-| Language | Python 3.11+ |
-| Models | Pydantic v2 |
-| Data | pandas, numpy, scipy |
-| Exchange SDK | hyperliquid-python-sdk |
-| Database | SQLite (WAL mode, 18 databases, 208M+ rows) |
-| Testing | pytest (4,376 tests, 323 files) |
-| Linting | ruff, mypy --strict |
-| Deployment | AWS EC2 (Tokyo), systemd services + timers |
-| Data collection | 28 daemons (candles, L2, funding, OI, sentiment, vaults) |
-
----
-
-## Relationship to EISEN
-
-VALEN is the successor to [EISEN](https://github.com/raydeoliveira/eisen-portfolio), a similar system built for Coinbase Advanced Trade. EISEN reached S7 with 4 active pillars before hitting structural ceilings.
-
-**What transferred**: Clean Architecture patterns (refined over 7 versions), hypothesis-driven methodology, 9 meta-patterns, optimization target selection (Sortino over Sharpe), dead-end documentation practice.
-
-**What was re-evaluated and rejected again**: Funding arbitrage (no alpha at any frequency), mean reversion (loses to holding in sideways), grid trading (viable but dominated by directional). The intellectual honesty to re-test and re-reject was as important as the new findings.
-
-**What was re-evaluated and accepted**: Short hedging (native perp shorts at lower fees), multi-asset momentum (100+ perp markets with short-side), per-asset signal decomposition (strongest meta-finding, +123% Sortino improvement).
-
----
-
-## System Evolution
-
-VALEN has gone through four major system versions — from BTC-only prototype to live multi-asset production system. See [EVOLUTION.md](EVOLUTION.md) for the full narrative, including what was built, what was learned, and what was killed at each stage.
-
-| Version | Tests | PRs | Rules | Status |
-|---------|-------|-----|-------|--------|
-| S1 | ~500 | ~50 | 10 | Paper trading, BTC-only |
-| S2 | ~2,500 | ~400 | 43 | Paper trading, 11 sleeves |
-| S3.x | ~4,000 | ~750 | 53 | Pre-production, research-hardened |
-| **S4** | **4,376** | **905+** | **62** | **Live on mainnet** |
-
----
-
-## Technical Depth
-
-### Quantitative & Research Engineering
-Factor modeling, time series analysis, regime detection, walk-forward out-of-sample validation, Monte Carlo simulation, Bonferroni-corrected hypothesis testing, factorial experiment design, Sortino/Omega/Calmar optimization, drawdown analysis, Kelly criterion sizing, ATR-based risk scaling.
-
-### Systems & Infrastructure
-Clean Architecture (ports & adapters), domain-driven design, event-driven architecture, microservice coordination, real-time data pipelines, WebSocket streaming, REST API integration, rate limiter design, 3-tier data isolation (cold/warm/hot), WAL-mode SQLite at scale (208M+ rows), systemd service orchestration, AWS EC2 deployment.
-
-### Market Microstructure & Execution
-Smart order routing, VPIN toxicity estimation, Kyle's Lambda price impact modeling, adverse selection detection, liquidation cascade suppression, maker/taker optimization, order book analysis, L2 depth processing, trade flow imbalance measurement.
-
-### AI & Multi-Agent Systems
-Multi-agent development coordination, git worktree isolation for parallel agent work, conflict detection and resolution, merge dependency analysis, institutional knowledge encoding (62-rule evolving contract), automated verification gates, hypothesis-driven agent workflows.
-
-### Software Engineering
-Python 3.11+, Pydantic v2, type-safe domain models (`Decimal`-based financial math), mypy strict mode, ruff linting, pytest (4,376 tests), CI-enforced import boundaries, interface contract testing, state persistence verification, structured logging, atomic configuration writes, environment-based secret management.
-
-### DeFi & Crypto-Native
-Hyperliquid DEX perpetual futures, on-chain execution, builder perps (TradFi instruments on-chain), cross-margin and isolated margin, funding rate modeling (per-asset, directional), inverse-volatility portfolio construction, euphoria-fade contrarian signals, vault flow analysis (smart money tracking).
-
----
-
-*This is a portfolio showcase repository. The full codebase, backtest results, and live trading infrastructure are maintained in a private repository.*
-
-*Built by [Ray De Oliveira](https://github.com/raydeoliveira)*
+*Built by [Ray De Oliveira](https://github.com/raydeoliveira) — product leader, systems architect, AI fleet operator.*

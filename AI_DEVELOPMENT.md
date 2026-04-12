@@ -1,10 +1,10 @@
-# AI-Augmented Development
+# AI Fleet Operation
 
 ## Overview
 
-VALEN was built and is continuously developed using **coordinated AI agents** operating in parallel sessions. This is not "AI-assisted coding" — it is a structured multi-agent system with defined isolation boundaries, coordination protocols, and an evolving rule set that grows from production incidents.
+VALEN was built by a solo product/engineering leader operating a fleet of AI coding agents. The key output isn't the code — it's the **harness**: the 62-rule agent contract, the conflict preflight system, the merge orchestrator, and the verification gates that let multiple agents work in parallel without stepping on each other.
 
-The result: **905+ PRs merged, 4,376 tests, 62 agent contract rules, 21 research verdicts** — a production system that is defined as much by its development process as by its trading logic.
+The result: **905+ PRs, 4,376 tests, ~150K LOC, 81 hypotheses tested** — a production trading system designed and shipped in ~4 weeks.
 
 ---
 
@@ -53,7 +53,7 @@ Every PR must pass `agent_verify.sh` (lint + type check + tests + architecture c
 
 ## The 62-Rule Agent Contract
 
-The agent contract is the most important artifact of the AI development process. It started with 10 basic rules and grew to 62 through a feedback loop: every production incident or research failure spawns a new rule that prevents recurrence.
+The agent contract is the most important artifact I built. It started with 10 basic rules and grew to 62 through a feedback loop: every production incident or research failure spawns a new rule that prevents recurrence. This is my engineering judgment, encoded as automated constraints.
 
 ### Rule Evolution Timeline
 
@@ -83,11 +83,11 @@ The agent contract is the most important artifact of the AI development process.
 - **Rules 54-57**: Deployment verification and incident review — mandatory pre/post-deploy checklists, incident post-mortems with rule additions
 - **Rules 58-62**: Data plane verification — production data must match expected schema, stale data detection, reconciliation between exchange state and internal state
 
-### Why This Matters for Engineering Leaders
+### Why This Matters
 
-The rule set is a living document of **organizational learning encoded as automated constraints**. In a human team, this knowledge lives in tribal memory and code review judgment. In an AI-augmented system, it must be explicit — every lesson learned becomes a rule that applies to every future session, regardless of which agent picks up the work.
+In a human team, engineering judgment lives in tribal memory and code review intuition. When I operate AI agents, that judgment must be explicit and mechanical. The 62-rule contract is essentially a compressed engineering culture — every lesson from every failure, applied automatically to every future session.
 
-The progression from 10 to 62 rules also demonstrates the system's ability to learn from its own failures. Each rule has a documented incident that motivated it, making the contract simultaneously a policy document and a post-mortem archive.
+This is the same problem engineering leaders face when scaling teams: how do you encode institutional knowledge so it survives turnover and applies consistently? The difference is that AI agents follow rules perfectly but have zero judgment about when rules conflict. The "why" annotations on each rule let me (and the agents) make exceptions intelligently.
 
 ---
 
@@ -159,4 +159,6 @@ Each session type has different agent configurations, verification requirements,
 
 ### Key Insight
 
-The most valuable output of AI-augmented development is not the code — it is the **encoded institutional knowledge** in the agent contract, VRULE registry, and hypothesis database. These artifacts ensure that every future development session starts with the full context of what has been tried, what failed, and why. In a traditional team, this knowledge lives in people's heads and is lost to turnover. In VALEN, it is versioned, searchable, and automatically applied.
+The most valuable output isn't the code — it's the **encoded institutional knowledge**: the agent contract, the VRULE registry, the hypothesis database. These ensure every future session starts with full context of what was tried, what failed, and why. In a traditional team, this knowledge lives in people's heads and is lost to turnover. In an AI-operated system, it's versioned, searchable, and automatically applied.
+
+This is why I frame my role as fleet operator and harness builder, not coder. The agents write Python. I design the system that makes their Python correct.
