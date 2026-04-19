@@ -4,7 +4,9 @@
 
 VALEN was built by a solo product/engineering leader operating a fleet of AI coding agents. The key output isn't the code — it's the **harness**: the 62-rule agent contract, the conflict preflight system, the merge orchestrator, and the verification gates that let multiple agents work in parallel without stepping on each other.
 
-The result: **905+ PRs, 4,376 tests, ~150K LOC, 81 hypotheses tested** — a production trading system designed and shipped in ~4 weeks.
+The result: **1,032 PRs, 5,301 tests, ~150K LOC, 127 hypotheses tested** — a production trading system designed, shipped, and live-hardened in ~4 weeks.
+
+This document is about the agentic coding harness itself — the part that generalizes beyond VALEN. If you're evaluating signal on how I operate AI at scale, the harness matters more than any single PR.
 
 ---
 
@@ -12,11 +14,11 @@ The result: **905+ PRs, 4,376 tests, ~150K LOC, 81 hypotheses tested** — a pro
 
 | Metric | Early (Month 1) | Current |
 |--------|-----------------|---------|
-| PRs merged | 18 | **905+** |
-| Tests | 497 | **4,376** across 323 files |
+| PRs merged | 18 | **1,032** |
+| Tests | 497 | **5,301** across 401 files |
 | Agent contract rules | 10 | **62** |
 | Data daemons | 0 | **28** |
-| Research hypotheses | 0 | **81** |
+| Research hypotheses | 0 | **127** |
 | Dead-end verdicts (VRULEs) | 0 | **21** |
 | Backtests logged | ~50 | **900+** |
 | Config files | ~10 | **109** |
@@ -87,7 +89,16 @@ The agent contract is the most important artifact I built. It started with 10 ba
 
 In a human team, engineering judgment lives in tribal memory and code review intuition. When I operate AI agents, that judgment must be explicit and mechanical. The 62-rule contract is essentially a compressed engineering culture — every lesson from every failure, applied automatically to every future session.
 
-This is the same problem engineering leaders face when scaling teams: how do you encode institutional knowledge so it survives turnover and applies consistently? The difference is that AI agents follow rules perfectly but have zero judgment about when rules conflict. The "why" annotations on each rule let me (and the agents) make exceptions intelligently.
+This is the same problem engineering leaders face when scaling teams: how do you encode institutional knowledge so it survives turnover and applies consistently? The difference is that AI agents follow rules perfectly but have zero judgment about when rules conflict. **The "why" annotations on each rule let me (and the agents) make exceptions intelligently.** A rule without its incident history gets applied dogmatically; a rule with its incident history gets applied with judgment.
+
+### Rule Quality Control
+
+Not every rule that gets proposed becomes a rule. The acceptance bar has two conditions:
+
+1. **The rule must prevent a specific, observed failure.** Speculative rules ("we should be careful about X") don't make it in. They get ignored; agents sense which rules are load-bearing and which are theater.
+2. **The rule must have a clear enforcement mechanism.** Either CI grep-detection, test-file enforcement, pre-commit hook, or dedicated audit script. A rule that depends on human vigilance is a rule that will be forgotten.
+
+VRULE-017 (CEM rejection, later overturned) is the cautionary tale. A rule that gets added without enough evidence, then has to be removed, damages the credibility of the entire rule system. Rule 40 now requires every VRULE to survive adversarial review on four dimensions (right data, right assets, right fee model, right signals) before becoming canonical. The meta-rule: **premature rules waste more time than premature absence.**
 
 ---
 
@@ -162,3 +173,57 @@ Each session type has different agent configurations, verification requirements,
 The most valuable output isn't the code — it's the **encoded institutional knowledge**: the agent contract, the VRULE registry, the hypothesis database. These ensure every future session starts with full context of what was tried, what failed, and why. In a traditional team, this knowledge lives in people's heads and is lost to turnover. In an AI-operated system, it's versioned, searchable, and automatically applied.
 
 This is why I frame my role as fleet operator and harness builder, not coder. The agents write Python. I design the system that makes their Python correct.
+
+---
+
+## Post-Mainnet Audit Pattern: The Three-Way Verification
+
+Once VALEN went live, a new class of audit emerged — not "does this code work" but "does the code, the deployed binary, and the data plane agree with each other?" Three independent facts that must reconcile before anything is "done":
+
+1. **Code exists locally.** The file is in the git repo.
+2. **Code is deployed.** The file is at `/opt/valen/src/...` on the EC2 host.
+3. **The data plane supports it.** The DB, daemon, or feed it depends on is actually running with the expected schema.
+
+An S4 module with tests passing locally is not "done" until all three are verified. Rule 58 (three-proof requirement) formalizes this. A single agent claiming "feature X works" is a local-fact agent; the deployment agent and the data-plane agent must independently confirm before the merge is considered complete.
+
+This triggered a new session type: **reconciliation sessions.** An agent whose only job is to answer the question "does state A match state B?" for a specific pair of facts. The vol-drift staleness bug, the 17x equity lie, the invisible builder perps — all were caught or cleanly diagnosed by reconciliation sessions.
+
+---
+
+## Adversarial Audit Cadence
+
+Adversarial audits (15-agent deep scans) are not one-time events. They run on a schedule:
+
+| Cadence | Focus | Typical findings |
+|---------|-------|------------------|
+| Weekly | New-code audit (PRs merged that week) | Interface contracts, silent exceptions, dead paths |
+| Monthly | Architecture drift audit | Components diverging from spec, stale docs, authority conflicts |
+| Per-incident | Targeted audit on failure class | The vol-drift bug triggered a state-staleness audit across all state-bearing components |
+| Pre-release | Full-system audit before major deploys | Comprehensive scan of the full component graph |
+
+Each cadence has its own scope, agent count, and merge protocol. The weekly audit is light-touch (3-5 agents); the monthly is heavier (10-15); the pre-release is comprehensive (the original 15-agent format).
+
+Audits produce two artifacts: **fix PRs** and **rule additions**. A finding that only produces a fix is weaker than one that also produces a rule — the fix is local, the rule prevents recurrence across all future sessions.
+
+---
+
+## The Authority Map: Agents and Composability
+
+As the system matured, a subtle failure class emerged: two independently-correct components producing globally-incoherent behavior. The S4TargetPipeline and the TailRiskOverlay were each correct in isolation, but when S4 silently overrode the tail-mult reduction with no log, the system's apparent caution (visible in logs) didn't match its actual behavior (visible in orders).
+
+I formalized an **authority map** — every sizing/policy component registered with explicit precedence rules against every other such component. 11 documented pairs. For each: who wins, under what conditions, how it's logged, what test verifies the rule.
+
+New components can't merge without registering their authority relationships. This is the agentic-harness version of the problem every engineering leader eventually hits: two subsystems built by different teams that are each internally correct and jointly broken. The solution isn't "better code reviews"; it's a mechanical registry of composition rules.
+
+---
+
+## The Meta-Pattern
+
+Every one of these harness features — git worktrees, conflict preflight, merge orchestrator, session typing, three-way verification, adversarial audits, authority map — shares a structure:
+
+1. **A specific failure class was observed.**
+2. **Instead of fixing the instance, the fix targeted the process.**
+3. **The process fix is mechanical, not documented.** CI enforces it. Pre-commit hooks enforce it. Tests enforce it.
+4. **The rule carries its incident history so agents can reason about edge cases.**
+
+This is the engineering leadership pattern that scales, whether your "team" is 15 agents or 15 humans. Documentation describes what should happen. Mechanical enforcement makes it happen. The difference between a rule that prevents recurrence and a rule that gets ignored is whether it's grep-enforced, test-enforced, or merely aspirational.

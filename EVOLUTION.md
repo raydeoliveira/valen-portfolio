@@ -28,7 +28,7 @@ VALEN has gone through four major system versions, each representing a fundament
 - Sub-hourly directional signals have 0% pass rate across 800+ configurations — fee drag exceeds alpha at VIP-0
 - The 4h cadence constraint became a foundational invariant that shaped all future architecture
 
-**Metrics**: ~500 tests, ~50 backtests, 10 agent contract rules
+**Metrics**: ~500 tests, ~50 backtests, 10 agent contract rules, 15 hypotheses
 
 ---
 
@@ -59,7 +59,7 @@ VALEN has gone through four major system versions, each representing a fundament
 - Strategy-mode engines lose to dual-EMA (VRULE-012) — complexity does not reliably beat simplicity
 - Funding drag is per-asset, not uniform (VRULE-020) — original 0.01%/8h assumption was 16x wrong for BTC
 
-**Metrics**: ~2,500 tests, ~500 backtests, 43 agent contract rules, 81 hypotheses tracked
+**Metrics**: ~2,500 tests, ~500 backtests, 43 agent contract rules, 60+ hypotheses tracked
 
 ---
 
@@ -103,42 +103,60 @@ VALEN has gone through four major system versions, each representing a fundament
 **Key decisions**:
 - Deployed to AWS Tokyo for low-latency proximity to Hyperliquid validators
 - Systemd services for orchestrator + data collectors with automated restart
-- Scheduled recalibration via systemd timers (daily short rescore, daily signal recal, weekly factor recal)
+- Scheduled recalibration via systemd timers (daily short rescore, daily signal recal, weekly factor recal, hourly builder perp candles)
 - Data plane verification rules (58-62) added after discovering state reconciliation bugs under live conditions
 - Per-asset time stops and regime-aware trail modulation activated in production
+- Typed `VALENRunSpec` replaces string-argument launcher — encapsulates mode, config, data dir, execution intent, and calibration references in a single structured spec
 
 **What was built**:
 - Live execution bridge with signal suppression (prevents double-entry on restart)
 - Multi-pool equity reader (standard perps + USDC + USDH + builder perp margin)
 - Order validator with per-asset szDecimals and 5-sig-fig price precision enforcement
 - Margin orchestrator for isolated margin pre-allocation on builder perps
-- Collateral rebalancer for cross-pool margin management
-- S4 target pipeline for calibrated per-asset performance targets
+- Collateral rebalancer for cross-pool margin management (USDH → USDC reverse swap)
+- S4 utility-ranked target pipeline (`utility = adjusted_edge / downside_es`; greedy allocation within domain caps)
 - Production deployment pipeline (SCP-based, not git — EC2 has no .git directory)
+- Authority conflict map: 11 precedence pairs formally documented with per-pair risk assessment
 
-**What was learned**:
+**What was learned from live operation**:
 - Sleeve equity computed from config weights was 17x wrong — must sync from actual exchange margin allocations
-- Builder perps (km:/xyz:) require completely separate routing paths from standard perps
+- Hyperliquid has three clearing houses (standard perps, builder perps, spot); `get_all_positions()` defaulted to only one, making builder perp positions invisible
 - HL market orders need explicit limit price field — SDK does not auto-fill, orders silently rejected
 - Signal suppression on restart prevents catastrophic double-entry (check existing positions before emitting orders)
 - Live vs. paper mode selected once at startup via adapter injection — prevents mode-coupling bugs
+- Reduce-only logic needs a restoration path when its input data normalizes — the vol-drift bug proved staleness semantics must be explicit
 
-**Metrics**: 4,376 tests across 323 files, 905+ PRs, 62 agent contract rules, 21 VRULEs, 900+ backtests
+### S4 post-mainnet incidents (the part that only happens live)
+
+Shipping to mainnet is a continuous event, not a deadline. Three weeks in:
+
+**The 17x equity lie.** Internal `allocated_capital` of $4,616 for BTC while exchange margin was $272. Root: sleeve equity computed from config weights with no exchange reconciliation. Fix: Rules 58-62 (data plane verification) — all sizing reads from authoritative exchange state, reconciliation runs every N minutes, divergence above threshold blocks trading.
+
+**Builder perps invisible.** `km:NVDA`, `km:RTX`, `km:PLTR`, `xyz:CL` are in a separate Hyperliquid clearing house. The default position-query API returned only standard perps. Real positions sat in a subsystem the orchestrator couldn't see. Rule 59: always query all clearing houses before reconciling.
+
+**Vol-drift staleness (2026-04-17).** After a 5-day data outage and recovery, degenerate realized-vol readings (BTC 396%, AZTEC 486%) slashed 6 sleeves to 0.5-1.6x leverage floors. The reduce-only vol-drift logic had no restoration path; overrides persisted in state forever. Capital deployment stuck at 17.8%. Fix: drop overrides on restart under three specific conditions (flat-at-shutdown, equity-rescaled, hedge-sleeve-exempt). Deployment recovered to 95%. Full story in [PROBLEMS_SOLVED.md](PROBLEMS_SOLVED.md#1-the-stale-vol-drift-bug).
+
+**Dual ModeManager.** Authority conflict audit found two independent `ModeManager` instances (orchestrator + S4) that could silently disagree. No test caught this because each instance was locally correct. Remediation in progress: single source of truth with the S4 instance reading from the orchestrator.
+
+**L3 silently dead.** 5 of 6 L3 sizing components producing nothing for 4 weeks after S4 cutover. Each unit test passed; the pipeline-level behavior was a bypass. Institutional response: pipeline-scope sizing traces; components must report what they *caused*, not what they *computed*.
+
+**Metrics**: **5,301 tests across 401 files · 1,032 PRs · 62 agent contract rules · 21 VRULEs · 127 hypotheses · 900+ backtests**
 
 ---
 
 ## The Arc
 
-| Version | Tests | PRs | Rules | Status |
-|---------|-------|-----|-------|--------|
-| S1 | ~500 | ~50 | 10 | Paper trading, BTC-only |
-| S2 | ~2,500 | ~400 | 43 | Paper trading, 11 sleeves |
-| S3.x | ~4,000 | ~750 | 53 | Pre-production, research-hardened |
-| **S4** | **4,376** | **905+** | **62** | **Live on mainnet** |
+| Version | Tests | PRs | Rules | Hypotheses | Status |
+|---------|-------|-----|-------|------------|--------|
+| S1 | ~500 | ~50 | 10 | ~15 | Paper trading, BTC-only |
+| S2 | ~2,500 | ~400 | 43 | ~60 | Paper trading, 11 sleeves |
+| S3.x | ~4,000 | ~750 | 53 | ~100 | Pre-production, research-hardened |
+| **S4** | **5,301** | **1,032** | **62** | **127** | **Live on mainnet** |
 
 The progression is not just quantitative (more tests, more rules). Each version represents a qualitative shift:
-- **S1 → S2**: From single-asset to multi-asset portfolio thinking
-- **S2 → S3**: From feature accumulation to adversarial self-critique
-- **S3 → S4**: From backtest artifact to production system managing real capital
 
-The 62-rule agent contract, 21 VRULEs, and 81-hypothesis registry are not overhead — they are the primary intellectual output. The code is the implementation; the process artifacts are the knowledge.
+- **S1 → S2**: From single-asset to multi-asset portfolio thinking. The per-asset decomposition finding (+123% Sortino) emerged here and became the strongest meta-principle.
+- **S2 → S3**: From feature accumulation to adversarial self-critique. The 15-agent deep audit, the factorial interaction failure (6 good findings combined worse than baseline), the VRULE overturn (VRULE-017 CEM) all happened in this phase.
+- **S3 → S4**: From backtest artifact to production system managing real capital. Paper mode hides an entire class of bugs — state divergence, clearing-house invisibility, stale-override persistence, observational silence. S4's hardening is mostly debugging the failure modes that only exist under real trading conditions.
+
+The 62-rule agent contract, 21 VRULEs, and 127-hypothesis registry are not overhead — **they are the primary intellectual output.** The code is the implementation; the process artifacts are the knowledge. If I had to rebuild VALEN from scratch tomorrow, the rules, VRULEs, and hypothesis registry would get me there 10x faster than the code itself.

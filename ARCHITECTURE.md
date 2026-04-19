@@ -276,7 +276,7 @@ config/
 
 ## Testing Architecture
 
-Tests organized by architectural layer, with 4,376 tests across 323 files:
+Tests organized by architectural layer, with 5,301 tests across 401 files:
 
 | Layer | Test Type | Example |
 |-------|-----------|---------|

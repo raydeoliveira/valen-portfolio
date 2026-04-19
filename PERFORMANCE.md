@@ -2,19 +2,18 @@
 
 VALEN went live on Hyperliquid mainnet on **April 4, 2026**. This page reports real, unredacted operational metrics from the production system. Absolute dollar amounts are normalized to protect account size.
 
-**This is week 1 data.** Presenting it honestly is the point — too many portfolio projects show only backtests.
+**This is early-live data.** Presenting it honestly is the point — too many portfolio projects show only backtests, and too many live-trading projects quietly curate their numbers. The April 4-10 period includes an EC2 migration outage. The April 17 spike shows the aftermath of the vol-drift staleness fix (capital deployment recovered from 17.8% to 95% — see [PROBLEMS_SOLVED.md](PROBLEMS_SOLVED.md#1-the-stale-vol-drift-bug)). Showing these messy inflections is deliberate.
 
 ---
 
-## Current Status (April 12, 2026)
+## Current Status (April 19, 2026)
 
 | Metric | Value |
 |--------|-------|
-| Days live | 8 |
-| Positions open | 17 (3 long book, 14 short basket) |
-| Gross leverage | 0.69x |
-| Max drawdown (from peak) | 1.1% |
-| Sleeves active | 11 / 11 |
+| Days live | 15 (with one 5-day migration outage) |
+| Sleeves active | 11 / 11 (5 currently carrying positions post-fix) |
+| Capital deployment | ~95% (post-vol-drift fix, up from 17.8% pre-fix) |
+| Max drawdown (from peak) | ~1.1% (occurred during initial sizing, day 2) |
 | Health check interval | ~5 minutes |
 | Circuit breaker trips | 0 |
 | API budget utilization | 0 / 960 per minute |
@@ -58,17 +57,20 @@ GROSS_LEVERAGE | 0.69x | hype=$9,377 nvda=$2,437 rtx=$1,448 short=$2,574
 
 Every 5 minutes, the system logs: equity per sleeve, drawdown, memory usage, API budget, and position state. Each sleeve independently evaluates signals, applies the economics gate (edge vs. cost), and reports back to the orchestrator.
 
-## Why Only 0.69x Leverage?
+## The Economics Gate
 
-The system's economics gate blocks trades where edge-to-cost ratio is below 1.3x. In the current regime, most sleeves compute edge too close to trading costs to justify position entry. The system prefers sitting flat to paying fees on marginal signals.
+The system's economics gate blocks trades where edge-to-cost ratio is below 1.3x. This is by design — the system prefers sitting flat to paying fees on marginal signals. From the logs:
 
-This is by design. From the logs:
 ```
 ECONOMICS_GATE | btc | edge_z=0.043 cost_z=0.043 ratio=1.0 < min=1.3
 ECONOMICS_GATE | oil | edge_z=-0.415 cost_z=0.060 ratio=-6.9 < min=1.3
 ```
 
 BTC has a valid long signal but the edge barely covers costs. Oil has negative edge — the system correctly refuses to trade it.
+
+In the early-live period, gross leverage hovered around 0.69x. Some of that was correct behavior (economics gate declining marginal edges). A portion of it, we later discovered, was the vol-drift staleness bug — six sleeves were frozen at 0.5-1.6x leverage floors by stale overrides, not by legitimate economics. Post-fix (April 17), the deployment recovered to 95% of equity with clean economics — five active long targets plus the hedge sleeve on signal.
+
+The takeaway: **low deployment can mean correctly cautious or silently broken.** Distinguishing between those two requires per-sleeve forensic analysis, not a dashboard alert.
 
 ## What's Not Shown
 
