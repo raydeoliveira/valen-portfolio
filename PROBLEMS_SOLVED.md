@@ -74,9 +74,9 @@ Open positions with real vol data are unaffected. The protective behavior that p
 
 ---
 
-## 2. The 15-Agent Deep Audit: 53 Bugs in One Session
+## 2. The 15-Agent Deep Audit: 50+ Bugs in One Session
 
-**Date:** S3.x research-hardening phase · **Stakes:** Pre-production confidence · **Outcome:** 12 merged PRs, 10 new engineering rules
+**Date:** S3.x research-hardening phase · **Stakes:** Pre-production confidence · **Outcome:** a batch of fix PRs merged in a single day, plus an entire new phase of engineering rules
 
 A single-agent code review finds surface bugs. I wanted the adversarial kind — the ones that only surface when 15 different lenses are applied in parallel, each specialized to hunt a specific class of failure.
 
@@ -84,19 +84,18 @@ A single-agent code review finds surface bugs. I wanted the adversarial kind —
 
 Each agent got a targeted audit scope, an explicit threat model, and hours to run unsupervised. They operated in isolated git worktrees with no coordination except through merged PRs.
 
-| Agent | Threat model | Bugs |
-|-------|--------------|------|
-| Signal integrity | L1 sleeves firing correctly? | 5 — dead sleeves, EMA config drift |
-| Execution layer | SOR state + routing decisions | 4 — thread-unsafe counters, gate arithmetic |
-| State persistence | Round-trip save/load symmetry | 3 — positions wiped, equity reset, PnL lost |
-| Interface contracts | Producer/consumer attribute match | 6 — `pct_change` vs `change_pct` class |
-| Exception handling | Silent `except` masking bugs | 8 — AttributeError/ImportError swallowed |
-| Dead code | Unused modules/methods | 19 modules identified |
-| Data access | SQLite concurrency patterns | 4 — missing busy_timeout, unbounded queries |
-| Configuration | Default factory purity | 3 — network I/O in dataclass defaults |
-| *Others* | Mixed | 1 |
+| Agent | Threat model | What surfaced |
+|-------|--------------|---------------|
+| Signal integrity | L1 sleeves firing correctly? | Dead sleeves, EMA config drift |
+| Execution layer | SOR state + routing decisions | Thread-unsafe counters, gate arithmetic |
+| State persistence | Round-trip save/load symmetry | Positions wiped, equity reset, PnL lost |
+| Interface contracts | Producer/consumer attribute match | Attribute-name mismatches (`pct_change` / `change_pct` class) |
+| Exception handling | Silent `except` masking bugs | `AttributeError` and `ImportError` swallowed |
+| Dead code | Unused modules/methods | Multiple dead modules |
+| Data access | SQLite concurrency patterns | Missing busy_timeout, unbounded queries |
+| Configuration | Default factory purity | Network I/O in dataclass defaults |
 
-**53 bugs. One session. 12 PRs merged in a single day.**
+**50+ bugs. One session. A batch of fix PRs merged in a single day.**
 
 ### The most important finding wasn't a bug — it was a category
 
@@ -384,7 +383,7 @@ Reading these eight stories in sequence, a pattern emerges. None of them was cau
 
 The institutional residue matters more than the individual fixes. The fixes are four-line diffs. The residue is 20+ rules, a contract-test category, a data-plane verification daemon, an authority map that gates new PRs, and an explicit taxonomy of bug classes. That residue is the actual deliverable of operating a production trading system with rigor.
 
-The 62-rule agent contract, 21 VRULEs, and 127-hypothesis registry are not overhead on top of the code. They *are* the engineering leadership output. The code is what got written after the rules were clear.
+The agent contract, VRULE registry, and hypothesis registry are not overhead on top of the code. They *are* the engineering leadership output. The code is what got written after the rules were clear.
 
 ---
 

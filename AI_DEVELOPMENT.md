@@ -2,11 +2,13 @@
 
 ## Overview
 
-VALEN was built by a solo product/engineering leader operating a fleet of AI coding agents. The key output isn't the code — it's the **harness**: the 62-rule agent contract, the conflict preflight system, the merge orchestrator, and the verification gates that let multiple agents work in parallel without stepping on each other.
+VALEN was built by a solo product/engineering leader operating a fleet of AI coding agents. The key output isn't the code — it's the **harness**: the agent contract, the conflict preflight system, the merge orchestrator, and the verification gates that let multiple agents work in parallel without stepping on each other.
 
-The result: **1,032 PRs, 5,301 tests, ~150K LOC, 127 hypotheses tested** — a production trading system designed, shipped, and live-hardened in ~4 weeks.
+The result: **1,000+ PRs, 5,000+ tests, ~150K LOC, 120+ hypotheses tested** — a production trading system designed, shipped, and live-hardened in ~4 weeks.
 
 This document is about the agentic coding harness itself — the part that generalizes beyond VALEN. If you're evaluating signal on how I operate AI at scale, the harness matters more than any single PR.
+
+Every scale metric in this document should be read as a **conservative lower bound** using `+` suffixes. Exact counts shift daily; counts without the suffix would imply false precision on a repository that is actively evolving.
 
 ---
 
@@ -14,14 +16,14 @@ This document is about the agentic coding harness itself — the part that gener
 
 | Metric | Early (Month 1) | Current |
 |--------|-----------------|---------|
-| PRs merged | 18 | **1,032** |
-| Tests | 497 | **5,301** across 401 files |
-| Agent contract rules | 10 | **62** |
-| Data daemons | 0 | **28** |
-| Research hypotheses | 0 | **127** |
-| Dead-end verdicts (VRULEs) | 0 | **21** |
+| PRs merged | ~20 | **1,000+** |
+| Tests | ~500 | **5,000+** |
+| Agent contract rules | ~10 | **60+** |
+| Data daemons | 0 | **25+** |
+| Research hypotheses | 0 | **120+** |
+| Dead-end verdicts (VRULEs) | 0 | **20+** |
 | Backtests logged | ~50 | **900+** |
-| Config files | ~10 | **109** |
+| Config files | ~10 | **100+** |
 | System status | Paper trading | **Live on mainnet** |
 | Deployment | Local daemons | **AWS EC2, systemd** |
 | Development model | Sprint-based | Continuous parallel sessions |
@@ -74,7 +76,7 @@ The agent contract is the most important artifact I built. It started with 10 ba
 - **Rule 39**: Always decompose aggregate signals into per-asset signals (+123% Sortino improvement)
 - **Rule 42**: Per-asset funding rates are different (PAXG negative = income, original model was 16x overstated)
 
-**Rules 44-53 (Deep audit):** Added after a 15-agent parallel audit found 53 bugs:
+**Rules 44-53 (Deep audit):** Added after a 15-agent parallel audit found 50+ bugs in a single session:
 - **Rule 44**: Interface contract verification (wrong attribute names made recalibrator dead for entire session)
 - **Rule 45**: No silent `except Exception: pass` (4 bugs hidden by bare except handlers)
 - **Rule 46**: `default_factory` must be pure (network calls in dataclass defaults broke CI)
@@ -87,7 +89,7 @@ The agent contract is the most important artifact I built. It started with 10 ba
 
 ### Why This Matters
 
-In a human team, engineering judgment lives in tribal memory and code review intuition. When I operate AI agents, that judgment must be explicit and mechanical. The 62-rule contract is essentially a compressed engineering culture — every lesson from every failure, applied automatically to every future session.
+In a human team, engineering judgment lives in tribal memory and code review intuition. When I operate AI agents, that judgment must be explicit and mechanical. The agent contract is essentially a compressed engineering culture — every lesson from every failure, applied automatically to every future session.
 
 This is the same problem engineering leaders face when scaling teams: how do you encode institutional knowledge so it survives turnover and applies consistently? The difference is that AI agents follow rules perfectly but have zero judgment about when rules conflict. **The "why" annotations on each rule let me (and the agents) make exceptions intelligently.** A rule without its incident history gets applied dogmatically; a rule with its incident history gets applied with judgment.
 
@@ -102,11 +104,11 @@ VRULE-017 (CEM rejection, later overturned) is the cautionary tale. A rule that 
 
 ---
 
-## Dead Code Archival: 36,658 LOC Removed
+## Dead Code Archival: Tens of Thousands of LOC Removed in One PR
 
-One of the most significant engineering health milestones: a single PR archived 36,658 lines of dead code — dead modules, stale allocators, superseded orchestrators, and tests that only tested dead code.
+One of the most significant engineering health milestones: a single PR archived tens of thousands of lines of dead code — dead modules, stale allocators, superseded orchestrators, and tests that only tested dead code.
 
-The test count dropped by ~900 — but every removed test was testing dead code. This is healthy: the codebase got leaner without losing any coverage of living code. The metrics honestly reflect the change rather than preserving inflated numbers.
+Test count dropped meaningfully in the same PR — but every removed test was testing dead code. This is healthy: the codebase got leaner without losing any coverage of living code. The metrics honestly reflect the change rather than preserving inflated numbers.
 
 This archival was prompted by a red-team audit that identified architecture drift — documentation and code diverging over months of rapid development. The red-team audit also caught that governor sleeve_multipliers were computed but never propagated to the sizing pipeline (a no-op bug).
 
@@ -114,21 +116,22 @@ This archival was prompted by a red-team audit that identified architecture drif
 
 ## Deep Audit: 15-Agent Parallel Bug Hunt
 
-The most ambitious multi-agent operation was a 15-agent deep audit that found **53 bugs** across the full codebase. Each agent was assigned a specific audit scope:
+The most ambitious multi-agent operation was a 15-agent deep audit. Each agent was assigned a specific audit scope and turned loose in parallel:
 
-| Agent | Scope | Bugs Found |
-|-------|-------|------------|
-| Signal integrity | L1 signal engines | 5 (sleeves never fired, EMA config dead code) |
-| Execution layer | SOR + routing | 4 (health monitor thread safety, gate miscalculation) |
-| State persistence | Save/load cycle | 3 (positions wiped, equity reset, PnL lost) |
-| Interface contracts | Cross-component wiring | 6 (wrong attribute names, missing propagation) |
-| Exception handling | Silent failures | 8 (bare except:pass hiding AttributeError, ImportError) |
-| Dead code | Unused modules/methods | 19 modules identified |
-| Data integrity | DB access patterns | 4 (missing busy_timeout, no LIMIT clauses) |
-| Configuration | Default values | 3 (network calls in default_factory) |
-| Others | Various | 1 remaining |
+| Agent | Scope | What turned up |
+|-------|-------|----------------|
+| Signal integrity | L1 signal engines | Dead sleeves, EMA config drift |
+| Execution layer | SOR + routing | Thread-unsafe counters, gate arithmetic |
+| State persistence | Save/load cycle | Positions wiped, equity reset, PnL lost |
+| Interface contracts | Cross-component wiring | Attribute-name mismatches (the `pct_change` / `change_pct` class) |
+| Exception handling | Silent failures | Bare `except: pass` hiding AttributeError, ImportError |
+| Dead code | Unused modules/methods | Multiple dead modules |
+| Data integrity | DB access patterns | Missing busy_timeout, unbounded queries |
+| Configuration | Default values | Network calls in `default_factory` |
 
-**12 PRs were merged in a single session**, each fixing a category of bugs. This audit also produced rules 44-53.
+The exact bug count (53) is less important than the categorical distribution. Multiple agents independently flagged *the same pattern* — silent exception swallowing appeared in six unrelated audits. **That intersection is the signal.** A category of bug found through six different threat models is a category of bug worth banning system-wide.
+
+A batch of fix PRs was merged in a single session, each handling a category. The audit also produced an entire phase of agent contract rules.
 
 ---
 
@@ -153,9 +156,9 @@ Each session type has different agent configurations, verification requirements,
 ### What Works
 
 1. **Git worktree isolation eliminates most file conflicts.** The conflict preflight catches the rest.
-2. **Rules that encode failure modes prevent repeat incidents.** The 62-rule contract is proof.
+2. **Rules that encode failure modes prevent repeat incidents.** The agent contract is proof.
 3. **Interface contract tests catch the #1 bug category.** Silent integration failures from attribute name mismatches.
-4. **Adversarial audit sessions find what normal development misses.** 53 bugs in one session.
+4. **Adversarial audit sessions find what normal development misses.** 50+ bugs in one session.
 5. **Canonical fee model prevents inconsistency.** Three different fee rates was the anti-pattern.
 6. **Session-typed development prevents mode mixing.** Research sessions vs. implementation sessions have different quality bars.
 
@@ -164,7 +167,7 @@ Each session type has different agent configurations, verification requirements,
 1. **Sprint model doesn't scale past initial build.** Replaced with continuous parallel sessions.
 2. **"13 agents in one sprint" created coordination overhead.** Smaller, focused sessions are more effective.
 3. **Silent exception handling hid critical bugs for weeks.** Now banned via Rule 45.
-4. **Dead code accumulated without active cleanup.** Now audited per PR via Rule 50. A single archival PR removed 36,658 LOC.
+4. **Dead code accumulated without active cleanup.** Now audited per PR via the dead-code rule. A single archival PR removed tens of thousands of LOC.
 5. **Aggregate signals masked per-asset opportunities.** Per-asset decomposition is now Rule 39.
 6. **Live deployment revealed new failure categories.** State reconciliation, data plane verification, and margin accounting bugs only appeared under real trading conditions — prompting rules 54-62.
 

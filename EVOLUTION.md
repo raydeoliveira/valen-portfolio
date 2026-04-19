@@ -46,11 +46,11 @@ VALEN has gone through four major system versions, each representing a fundament
 
 **What was built**:
 - 10 long sleeves + 1 short basket sleeve
-- Per-sleeve configuration system (109 config files)
+- Per-sleeve configuration system (100+ config files)
 - SmartOrderRouter with 6 microstructure gates (VPIN, Kyle's Lambda, Vol regime, TFI, Cascade, RSI)
 - Short basket engine with euphoria-fade scoring and weekly 6-factor rescore across 229-coin universe
-- Data collection pipeline (28 daemons: candles, L2, funding, OI, vault flows, sentiment)
-- SQLite archive: 208M+ rows, 38 GB, 3-tier isolation (cold/warm/hot)
+- Data collection pipeline (25+ daemons: candles, L2, funding, OI, vault flows, sentiment)
+- SQLite archive: 200M+ rows, ~40 GB, 3-tier isolation (cold/warm/hot)
 
 **What was learned**:
 - **Per-asset signal decomposition improved Sortino by +123%** — the single strongest meta-finding. Aggregate signals are almost always inferior to per-asset calibration.
@@ -79,8 +79,8 @@ VALEN has gone through four major system versions, each representing a fundament
 - Layer 3: UnifiedEventEngine, TailRiskOverlay, MomentumSizer, SmartMoneySizing, VaultConsensusOverlay
 - A1 asymmetric trade management (ATR-scaled stops, breakeven triggers, CEM gradual exits, time stops)
 - Portfolio Exposure Governor (correlation monitoring, drawdown-reactive scaling, HL leverage enforcement)
-- 15-agent deep audit found 53 bugs → rules 44-53 added
-- Dead code archival: 36,658 LOC removed in a single PR (test count dropped from 4,542 to 3,610 — every removed test was testing dead code)
+- 15-agent deep audit found 50+ bugs → entire audit-residue phase of rules added
+- Dead code archival: tens of thousands of LOC removed in a single PR (test count dropped because every removed test was testing dead code — healthy shrink, not coverage loss)
 - Automated recalibration chain (daily short rescore, daily signal recalibration, weekly factor recalibration)
 
 **What was learned**:
@@ -90,7 +90,7 @@ VALEN has gone through four major system versions, each representing a fundament
 - State save/load asymmetry destroyed position data on restart → round-trip tests now mandatory (Rule 52)
 - Dead code accumulates without active pruning — 19 dead modules discovered in single audit → per-PR audit now required (Rule 50)
 
-**Metrics**: ~4,000 tests, ~900 backtests, 53 agent contract rules, 21 VRULEs
+**Metrics**: ~4,000 tests, ~900 backtests, 50+ agent contract rules, 20+ VRULEs
 
 ---
 
@@ -140,7 +140,7 @@ Shipping to mainnet is a continuous event, not a deadline. Three weeks in:
 
 **L3 silently dead.** 5 of 6 L3 sizing components producing nothing for 4 weeks after S4 cutover. Each unit test passed; the pipeline-level behavior was a bypass. Institutional response: pipeline-scope sizing traces; components must report what they *caused*, not what they *computed*.
 
-**Metrics**: **5,301 tests across 401 files · 1,032 PRs · 62 agent contract rules · 21 VRULEs · 127 hypotheses · 900+ backtests**
+**Metrics**: **5,000+ tests · 1,000+ PRs · 60+ agent contract rules · 20+ VRULEs · 120+ hypotheses · 900+ backtests**
 
 ---
 
@@ -148,10 +148,12 @@ Shipping to mainnet is a continuous event, not a deadline. Three weeks in:
 
 | Version | Tests | PRs | Rules | Hypotheses | Status |
 |---------|-------|-----|-------|------------|--------|
-| S1 | ~500 | ~50 | 10 | ~15 | Paper trading, BTC-only |
-| S2 | ~2,500 | ~400 | 43 | ~60 | Paper trading, 11 sleeves |
-| S3.x | ~4,000 | ~750 | 53 | ~100 | Pre-production, research-hardened |
-| **S4** | **5,301** | **1,032** | **62** | **127** | **Live on mainnet** |
+| S1 | ~500 | ~50 | ~10 | ~15 | Paper trading, BTC-only |
+| S2 | ~2,500 | ~400 | ~40 | ~60 | Paper trading, 11 sleeves |
+| S3.x | ~4,000 | ~750 | ~50 | ~100 | Pre-production, research-hardened |
+| **S4** | **5,000+** | **1,000+** | **60+** | **120+** | **Live on mainnet** |
+
+Exact counts drift daily; the table uses conservative round-number floors. What scales is not test count — what scales is the *ratio of encoded institutional knowledge* (agent rules + VRULEs + hypothesis registry) to raw lines of code.
 
 The progression is not just quantitative (more tests, more rules). Each version represents a qualitative shift:
 
@@ -159,4 +161,4 @@ The progression is not just quantitative (more tests, more rules). Each version 
 - **S2 → S3**: From feature accumulation to adversarial self-critique. The 15-agent deep audit, the factorial interaction failure (6 good findings combined worse than baseline), the VRULE overturn (VRULE-017 CEM) all happened in this phase.
 - **S3 → S4**: From backtest artifact to production system managing real capital. Paper mode hides an entire class of bugs — state divergence, clearing-house invisibility, stale-override persistence, observational silence. S4's hardening is mostly debugging the failure modes that only exist under real trading conditions.
 
-The 62-rule agent contract, 21 VRULEs, and 127-hypothesis registry are not overhead — **they are the primary intellectual output.** The code is the implementation; the process artifacts are the knowledge. If I had to rebuild VALEN from scratch tomorrow, the rules, VRULEs, and hypothesis registry would get me there 10x faster than the code itself.
+The agent contract, VRULE registry, and hypothesis registry are not overhead — **they are the primary intellectual output.** The code is the implementation; the process artifacts are the knowledge. If I had to rebuild VALEN from scratch tomorrow, the rules, VRULEs, and hypothesis registry would get me there 10x faster than the code itself.

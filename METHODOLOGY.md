@@ -2,11 +2,11 @@
 
 ## Philosophy
 
-Every design decision in VALEN is treated as a hypothesis to be tested, not an opinion to be defended. This methodology was forged through EISEN's development (7 system versions, 4 strategy eliminations, hundreds of backtests) and hardened through VALEN's own research program: **127 hypotheses tested, 21 dead-end verdicts, 900+ backtests**.
+Every design decision in VALEN is treated as a hypothesis to be tested, not an opinion to be defended. This methodology was forged through EISEN's development (7 system versions, 4 strategy eliminations, hundreds of backtests) and hardened through VALEN's own research program: **120+ hypotheses tested, 20+ dead-end verdicts, 900+ backtests**.
 
 The core principle: **a strategy that cannot be killed by its own test plan is not being tested rigorously enough.**
 
-The second principle: **a well-documented rejection is more valuable than an untested assumption.** VALEN's 21 VRULEs (dead-end verdicts) prevent future work from repeating past failures. Each VRULE encodes not just "this doesn't work" but the specific conditions under which it was tested, so it can be re-evaluated if conditions change.
+The second principle: **a well-documented rejection is more valuable than an untested assumption.** VALEN's VRULEs (20+ dead-end verdicts) prevent future work from repeating past failures. Each VRULE encodes not just "this doesn't work" but the specific conditions under which it was tested, so it can be re-evaluated if conditions change.
 
 ---
 
@@ -42,7 +42,7 @@ Every proposed change — new signal, parameter adjustment, sleeve addition — 
 
 ### Hypothesis Registry
 
-All 127 hypotheses are tracked in a central JSON registry with:
+Every hypothesis is tracked in a central JSON registry with:
 - Unique ID (e.g., `VH-087`)
 - Status: `proposed` | `testing` | `accepted` | `rejected` | `conditional_pass`
 - Parent hypothesis (if derived from a prior test)
@@ -113,7 +113,7 @@ If N parameter combinations were tested, apply a data snooping correction:
 
 ## Dead-End Verdicts (VRULEs)
 
-Failed strategies and rejected hypotheses receive formal verdicts. VALEN has 21 VRULEs, each preventing future work from repeating a tested failure.
+Failed strategies and rejected hypotheses receive formal verdicts. VALEN has 20+ VRULEs, each preventing future work from repeating a tested failure.
 
 ### VRULE Structure
 

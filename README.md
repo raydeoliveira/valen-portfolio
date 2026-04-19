@@ -10,9 +10,9 @@
 
 # VALEN — Multi-Asset Algorithmic Trading System
 
-**Live on Hyperliquid mainnet since April 4, 2026.** 3-layer architecture, 11 independent sleeves, 5,300+ tests. Designed and shipped in ~4 weeks by a solo product/engineering leader operating a fleet of AI agents, building on patterns refined across 7 prior system versions.
+**Live on Hyperliquid mainnet since April 4, 2026.** 3-layer architecture, 11 independent sleeves, 5,000+ tests. Designed and shipped in ~4 weeks by a solo product/engineering leader operating a fleet of AI agents, building on patterns refined across 7 prior system versions.
 
-> This is a portfolio showcase. The full codebase (1,030+ PRs, ~150K LOC) lives in a private repository.
+> This is a portfolio showcase. The full codebase (1,000+ PRs, ~150K LOC) lives in a private repository.
 
 ---
 
@@ -22,9 +22,9 @@ Most portfolio projects show finished code. This one shows **how a solo operator
 
 If you're evaluating technical judgment, I'd point to:
 
-- **[PROBLEMS_SOLVED.md](PROBLEMS_SOLVED.md)** — eight flagship engineering war stories. Each one has a wrong first hypothesis, a forensic process, a root cause, and institutional residue. The staleness bug that froze 82% of capital behind ghost state. The 15-agent audit that found 53 bugs in a single day. The "edge is in the exit, not the entry" finding that inverted an entire research program. **Read this first if you want signal on how I reason.**
-- **[AI_DEVELOPMENT.md](AI_DEVELOPMENT.md)** — the agentic harness. The 62-rule agent contract wasn't designed in advance; it grew from production incidents. Git worktree isolation, conflict preflight, merge orchestration, and session-typed development let 15 agents work in parallel without stepping on each other.
-- **[METHODOLOGY.md](METHODOLOGY.md)** — 127 hypotheses tested, 21 dead-end verdicts documented (VRULEs), 900+ backtests logged. Hypothesis-driven development with pre-declared kill criteria, factorial interaction tests, and adversarial VRULE review.
+- **[PROBLEMS_SOLVED.md](PROBLEMS_SOLVED.md)** — eight flagship engineering war stories. Each one has a wrong first hypothesis, a forensic process, a root cause, and institutional residue. The staleness bug that froze 80%+ of capital behind ghost state. The 15-agent audit that found 50+ bugs in a single day. The "edge is in the exit, not the entry" finding that inverted an entire research program. **Read this first if you want signal on how I reason.**
+- **[AI_DEVELOPMENT.md](AI_DEVELOPMENT.md)** — the agentic harness. The 60+-rule agent contract wasn't designed in advance; it grew from production incidents. Git worktree isolation, conflict preflight, merge orchestration, and session-typed development let 15 agents work in parallel without stepping on each other.
+- **[METHODOLOGY.md](METHODOLOGY.md)** — 120+ hypotheses tested, 21 dead-end verdicts documented (VRULEs), 900+ backtests logged. Hypothesis-driven development with pre-declared kill criteria, factorial interaction tests, and adversarial VRULE review.
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** — Clean Architecture with CI-enforced import boundaries, 4 port interfaces, and identical backtest/live adapter contracts. Infrastructure details are implementation details; the domain is exchange-agnostic.
 
 ---
@@ -33,7 +33,7 @@ If you're evaluating technical judgment, I'd point to:
 
 I'm a product and engineering leader with 10+ years of experience building and exiting startups. My career has been 0-to-1 and 1-to-10: defining products, hiring teams, shipping systems, finding market fit.
 
-VALEN represents a new operating model: **the full-stack founder who architects complex systems and operates AI agent fleets as force multipliers.** I didn't write 150K lines of Python by hand. I designed the architecture, wrote the 62-rule agent contract that encodes my engineering judgment, directed research campaigns across 127 hypotheses, and operated the fleet that implemented it. The system reflects my decisions — what to build, what to kill, how components interact, when to ship.
+VALEN represents a new operating model: **the full-stack founder who architects complex systems and operates AI agent fleets as force multipliers.** I didn't write 150K lines of Python by hand. I designed the architecture, wrote the 60+-rule agent contract that encodes my engineering judgment, directed research campaigns across 120+ hypotheses, and operated the fleet that implemented it. The system reflects my decisions — what to build, what to kill, how components interact, when to ship.
 
 The relevant skill isn't "can write Python." It's: can I take a complex, novel domain (quantitative trading on a frontier DEX), architect a production system, operate AI at scale to build it, and ship it live with real capital in weeks instead of quarters — and then debug it under production stakes when it inevitably surprises me?
 
@@ -46,11 +46,11 @@ The relevant skill isn't "can write Python." It's: can I take a complex, novel d
 | **Status** | Live on Hyperliquid mainnet, AWS EC2 Tokyo (ap-northeast-1) |
 | **Version** | S4 — designed, shipped, and hardened March-April 2026 |
 | **Architecture** | 3-layer (Signal → Execution → Sizing), 11 sleeves, Clean Architecture |
-| **Scale** | **5,301 tests · 1,032 PRs · ~150K LOC · 109 config files** |
-| **Research** | **127 hypotheses tested · 21 documented dead-ends · 900+ backtests** |
-| **Data** | 28 daemons · 208M+ rows · 18 SQLite databases · 3-tier access isolation |
+| **Scale** | **5,000+ tests · 1,000+ PRs · ~150K LOC · 100+ config files** |
+| **Research** | **120+ hypotheses tested · 20+ documented dead-ends · 900+ backtests** |
+| **Data** | 25+ collection daemons · 200M+ archive rows · 18 SQLite databases · 3-tier access isolation |
 | **Operations** | Automated daily/weekly recalibration, 5-min health checks, systemd timers |
-| **AI process** | **62-rule agent contract · git worktree isolation · conflict preflight · merge orchestrator** |
+| **AI process** | **60+-rule agent contract · git worktree isolation · conflict preflight · merge orchestrator** |
 
 **[Live performance →](PERFORMANCE.md)** · **[Evolution S1→S4 →](EVOLUTION.md)** · **[War stories →](PROBLEMS_SOLVED.md)**
 
@@ -88,16 +88,18 @@ Full architecture in [ARCHITECTURE.md](ARCHITECTURE.md). The interesting parts a
 
 The scale is not the point. The discipline behind the scale is the point.
 
-- **5,301 tests** isn't impressive as a count; it's impressive as a ratio to the bugs it has caught. The 15-agent deep audit found 53 bugs in a single session. Every one of them generated a test that makes recurrence impossible. Test count grows from failure, not from completion metrics.
-- **1,032 PRs** looks like velocity. It's actually filter. The PR template requires a quantitative verification number for every performance claim, an explicit long-vs-short symmetry declaration, a dead-code audit, and a factorial interaction test if the change touches an accepted finding. Most rejected PRs fail the verification number requirement.
-- **127 hypotheses tested** isn't a measure of experimentation — it's a measure of *killed ideas*. 51% of hypotheses end in a KILL, REJECT, or FAIL verdict. 21 are formalized as VRULEs (dead-end verdicts) so future research doesn't re-investigate them.
-- **62-rule agent contract** isn't a style guide. Every rule traces to a specific incident. Rule 45 exists because four bugs hid behind `except Exception: pass` for weeks. Rule 37 exists because three scripts had three different fee rates, all wrong. The rules *grew from incidents, not from imagination.*
+AI-augmented development makes it cheap to inflate headline numbers, so these only matter in context:
+
+- **5,000+ tests** isn't impressive as a count; it's impressive as a ratio to the bugs it has caught. A 15-agent deep audit found 50+ bugs in a single session. Every one generated a test that makes recurrence impossible. Test count grows from failure, not from completion metrics.
+- **1,000+ PRs** looks like velocity. It's actually filter. The PR template requires a quantitative verification number for every performance claim, an explicit long-vs-short symmetry declaration, a dead-code audit, and a factorial interaction test if the change touches an accepted finding. Most rejected PRs fail the verification number requirement.
+- **120+ hypotheses tested** isn't a measure of experimentation — it's a measure of *killed ideas*. Roughly half of all hypotheses end in a KILL, REJECT, or FAIL verdict. The ones that reach VRULE status prevent future research from re-investigating them.
+- **60+-rule agent contract** isn't a style guide. Every rule traces to a specific incident. Rule 45 exists because four bugs hid behind `except Exception: pass` for weeks. Rule 37 exists because three scripts had three different fee rates, all wrong. The rules *grew from incidents, not from imagination.*
 
 ---
 
 ## What was tested and killed
 
-The system is defined as much by its 21 documented rejections as by what survived:
+The system is defined as much by its documented rejections as by what survived:
 
 | Verdict | Finding |
 |---------|---------|
@@ -136,16 +138,16 @@ Production files from the private repository. Signal parameters and scoring form
 
 **I built the harness, not just the system.** VALEN's development infrastructure is the part that generalizes.
 
-- **62-rule agent contract** — started at 10, grew through production incidents. Each rule traces to a specific bug and includes a *why* annotation so the agent can reason about edge cases rather than blindly follow.
+- **60+-rule agent contract** — started at 10, grew through production incidents. Each rule traces to a specific bug and includes a *why* annotation so the agent can reason about edge cases rather than blindly follow.
 - **Git worktree isolation** — each agent works in its own worktree. No file conflicts, clean merge paths, failure isolation.
 - **Conflict preflight** — agents check for exclusive zone contention before starting work. Exit code 2 = stop. Prevents the cascading merge conflict problem that plagues naive parallel development.
 - **Merge orchestrator** — computes safe PR merge order based on file dependency analysis. Replaced the "merge and hope" pattern that created integration failures.
-- **Verification gate** — lint + type check + 5,301 tests + architecture conformance, all before merge. Import-boundary rules are CI-enforced, not convention.
+- **Verification gate** — lint + type check + full test suite + architecture conformance, all before merge. Import-boundary rules are CI-enforced, not convention.
 - **Session typing** — research sessions, implementation sessions, audit sessions, and production sessions have different tolerances, verification bars, and merge protocols. Mode-mixing was a failure class; session typing prevents it.
 
-The 62 rules evolved in phases: foundation (1-10) → research discipline (11-28) → research failure prevention (29-38) → meta-findings encoded as rules (39-43) → deep audit residue (44-53) → live deployment and data plane (54-62). **Each phase was triggered by a class of failure that the previous rules didn't prevent.**
+The rules evolved in phases: foundation → research discipline → research failure prevention → meta-findings encoded as rules → deep audit residue → live deployment and data plane. **Each phase was triggered by a class of failure that the previous phase didn't prevent.**
 
-A 15-agent parallel audit found 53 bugs in a single session — interface mismatches, silent exceptions, state persistence failures, dead code. That session produced rules 44-53 and 12 merged fix PRs.
+A 15-agent parallel audit found dozens of bugs in a single session — interface mismatches, silent exceptions, state persistence failures, dead code. That session produced an entire phase of the agent contract and a batch of merged fix PRs in a single day.
 
 Full breakdown, including per-rule incident traces, in [AI_DEVELOPMENT.md](AI_DEVELOPMENT.md).
 
@@ -167,12 +169,12 @@ AWS EC2 Tokyo (ap-northeast-1)
     │     ├── valen-builder-perp-candles (hourly km:/xyz: candles)
     │     └── valen-coinalyze-collector  (cross-exchange OI/funding)
     │
-    └── 28 data collection daemons
-          → 208M+ rows across 18 SQLite databases
+    └── 25+ data collection daemons
+          → 200M+ rows across 18 SQLite databases
           → 3-tier access isolation (cold archive / warm daemon DBs / hot live API)
 ```
 
-Health checks every 5 minutes. Economics gate blocks trades where edge-to-cost ratio < 1.3x. Signal suppression on restart prevents double-entry after downtime. State reconciliation against exchange state is mandatory before any sizing decision (Rules 58-62).
+Health checks every 5 minutes. Economics gate blocks trades where edge-to-cost ratio < 1.3x. Signal suppression on restart prevents double-entry after downtime. State reconciliation against exchange state is mandatory before any sizing decision (data plane verification rules).
 
 [Live performance data →](PERFORMANCE.md)
 
@@ -184,12 +186,12 @@ Health checks every 5 minutes. Economics gate blocks trades where edge-to-cost r
 2. **`except Exception: pass` is a time bomb.** Four critical bugs hid behind bare exception handlers. Ban them, grep-enforce the ban in CI.
 3. **Independently-validated improvements don't compose.** Six accepted findings combined produced worse results than baseline. Pairwise interaction testing is mandatory before simultaneous deployment.
 4. **Canonical models beat per-script constants.** Three different fee rates in three scripts, all wrong. Single source of truth, imported everywhere, grep-enforced.
-5. **Active deletion is a feature.** 36,658 LOC of dead code archived in a single PR. Without active pruning, dead code grows faster than live code.
+5. **Active deletion is a feature.** Tens of thousands of lines of dead code archived in a single PR. Without active pruning, dead code grows faster than live code.
 6. **Internal state and exchange state are independent facts.** The system's belief about its positions must be mechanically reconciled against the exchange's ground truth. Paper-mode testing cannot surface this class of bug.
 
 ## Lessons for AI-enabled product teams
 
-1. **The harness is the product.** The 62-rule contract, conflict preflight, and merge orchestrator are more valuable than any individual PR. They encode judgment that applies to every future session.
+1. **The harness is the product.** The agent contract, conflict preflight, and merge orchestrator are more valuable than any individual PR. They encode judgment that applies to every future session.
 2. **Rules should grow from incidents, not imagination.** Every rule traces to a specific failure. Speculative rules get ignored; incident-driven rules get respected. Each rule has a *why* so the agent can reason at edge cases.
 3. **Session typing prevents mode-mixing.** Research sessions (exploratory) vs implementation sessions (strict verification) vs audit sessions (adversarial) vs production sessions (safety-critical) have different quality bars. Don't mix them.
 4. **AI agents need boundaries, not babysitting.** Worktree isolation, conflict preflight, and verification gates let agents work autonomously. The constraint system replaces micromanagement.
@@ -204,8 +206,8 @@ Health checks every 5 minutes. Economics gate blocks trades where edge-to-cost r
 |------|-----------|
 | Pre-March 2026 | EISEN S1-S7 on Coinbase (predecessor system, 7 architecture versions) |
 | Early March | **VALEN S1**: Clean Architecture foundation, BTC-only, ports & adapters |
-| Mid March | **S2**: 11-sleeve expansion, short basket, SmartOrderRouter, 28 data daemons |
-| Late March | **S3**: Research hardening, 127 hypotheses, 21 VRULEs, 15-agent deep audit |
+| Mid March | **S2**: 11-sleeve expansion, short basket, SmartOrderRouter, 25+ data daemons |
+| Late March | **S3**: Research hardening, 120+ hypotheses, 20+ VRULEs, 15-agent deep audit |
 | **April 4** | **S4: Live on Hyperliquid mainnet** with real capital |
 | April 6-10 | EC2 Tokyo migration, 5-day infrastructure hardening, 30+ live bug fixes |
 | April 11-13 | First post-mainnet incidents: data-plane drift, builder perp invisibility |
@@ -219,7 +221,7 @@ S1 through S4 happened in approximately 4 weeks. The post-April work reflects wh
 ## Related reading
 
 - **[PROBLEMS_SOLVED.md](PROBLEMS_SOLVED.md)** — 8 flagship engineering war stories with forensic detail. *Start here for engineering signal.*
-- **[AI_DEVELOPMENT.md](AI_DEVELOPMENT.md)** — multi-agent coordination, 62-rule contract evolution, 15-agent deep audit
+- **[AI_DEVELOPMENT.md](AI_DEVELOPMENT.md)** — multi-agent coordination, agent contract evolution, 15-agent deep audit
 - **[METHODOLOGY.md](METHODOLOGY.md)** — hypothesis-driven research, factorial campaigns, temporal red-teaming, VRULE review
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** — 3-layer architecture, port interfaces, hierarchical sizing, authority map
 - **[EVOLUTION.md](EVOLUTION.md)** — S1 → S4 version narrative with scale metrics at each stage

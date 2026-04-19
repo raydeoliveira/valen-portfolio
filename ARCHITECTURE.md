@@ -234,7 +234,7 @@ VRULE-019 proved that no single tier suffices. Every rotation strategy tested wa
 ```
 ┌─────────────────────────────────────────────────┐
 │  COLD TIER (Archive)                             │
-│  hl_archive.db: 208M+ rows, 38 GB               │
+│  hl_archive.db: 200M+ rows, ~40 GB              │
 │  Purpose: Backtesting ONLY                       │
 │  Access: Read-only, busy_timeout=30s, LIMIT      │
 ├─────────────────────────────────────────────────┤
@@ -267,7 +267,7 @@ config/
 ├── sleeve_c_short_basket.json    # Short basket: scoring weights, rotation schedule
 ├── signal_calibration.json       # Per-asset signal calibration parameters
 ├── fee_model.json                # Canonical fees (taker 4.5 bps, maker 1.5 bps)
-└── ...                           # 109 config files total
+└── ...                           # 100+ config files total
 ```
 
 **No hardcoded parameters in strategy code.** Every threshold, EMA period, leverage limit, and fee rate comes from configuration. This is enforced by code review and CI, not convention.
@@ -276,7 +276,7 @@ config/
 
 ## Testing Architecture
 
-Tests organized by architectural layer, with 5,301 tests across 401 files:
+Tests organized by architectural layer (5,000+ tests in total):
 
 | Layer | Test Type | Example |
 |-------|-----------|---------|

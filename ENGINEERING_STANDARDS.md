@@ -175,7 +175,7 @@ What NOT to log: raw API responses (secrets risk), full order book snapshots (vo
 3. **Environment variables for secrets.** Wallet keys in `.env`, never in config.
 4. **Atomic writes.** Config updates via tmp + rename to prevent partial writes.
 5. **Per-sleeve configs.** No one-size-fits-all — each sleeve has independent configuration.
-6. **109 config files** managed across sleeves, signal parameters, recalibration, and deployment.
+6. **100+ config files** managed across sleeves, signal parameters, recalibration, and deployment.
 
 ---
 
@@ -191,7 +191,7 @@ Scopes: btc, hype, short-basket, sor, backtest, governor, ...
 
 ### PR Requirements
 1. Descriptive title and rationale
-2. All tests passing (5,301 tests)
+2. All tests passing
 3. Architecture conformance check passing
 4. Applied to longs: YES/NO. Applied to shorts: YES/NO. If NO, explain why not.
 5. Dead code audit
